@@ -71,6 +71,7 @@ export class FaceRenderer {
     this.bg = this.#makeBackground();
     if (!SPRITES) buildSprites();
     this.visX = 0;        // smooth horizontal position of the falling piece
+    this.visY = 0;        // smooth vertical position (soft drop glides, not steps)
     this.lastSeq = -1;
   }
 
@@ -195,14 +196,25 @@ export class FaceRenderer {
     // ghost + falling piece (interpolated for smoothness)
     if (board.piece && !board.toppedOut) {
       const p = board.piece;
-      if (board.pieceSeq !== this.lastSeq) { this.lastSeq = board.pieceSeq; this.visX = p.x; }
+      const gy = board.ghostY();
+      const targetY = Math.min(p.y + Math.max(0, Math.min(1, fallFrac)), gy);
+      if (board.pieceSeq !== this.lastSeq) {
+        this.lastSeq = board.pieceSeq;
+        this.visX = p.x;
+        this.visY = targetY;
+      }
       this.visX += (p.x - this.visX) * Math.min(1, dtSec * 26);
       if (Math.abs(p.x - this.visX) < 0.02) this.visX = p.x;
 
-      const gy = board.ghostY();
-      const renderY = Math.min(p.y + Math.max(0, Math.min(1, fallFrac)), gy);
+      // vertical: chase the logical position so soft drop GLIDES instead of
+      // stepping a whole cell every repeat tick
+      this.visY += (targetY - this.visY) * Math.min(1, dtSec * 24);
+      if (targetY - this.visY > 0.9) this.visY = targetY - 0.9; // cap the lag
+      if (Math.abs(targetY - this.visY) < 0.01) this.visY = targetY;
+      this.visY = Math.min(this.visY, gy);
+
       const dx = (this.visX - p.x) * CELL;
-      const dy = (renderY - p.y) * CELL;
+      const dy = (this.visY - p.y) * CELL;
 
       c.save();
       c.beginPath();
