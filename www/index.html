@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBELISK</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="timer-wrap">
+    <div class="hud-label">SURVIVED</div>
+    <div id="timer">00:00<span class="tenths">.0</span></div>
+  </div>
+
+  <div id="face-panel" class="side-panel left">
+    <div class="hud-label">THIS FACE</div>
+    <div class="face-tag"><span id="face-glyph">I</span></div>
+    <div class="big-num" id="face-lines">0</div>
+    <div class="hud-sub">LINES</div>
+  </div>
+
+  <div id="total-panel" class="side-panel right">
+    <div class="hud-label">ALL FACES</div>
+    <div class="big-num" id="total-lines">0</div>
+    <div class="hud-sub">TOTAL LINES</div>
+    <div class="hud-label lvl">VELOCITY</div>
+    <div class="mid-num" id="level">1</div>
+  </div>
+
+  <div id="monitors">
+    <div class="monitor"><canvas class="mon-cv" width="90" height="176"></canvas><div class="mon-tag"></div></div>
+    <div class="monitor"><canvas class="mon-cv" width="90" height="176"></canvas><div class="mon-tag"></div></div>
+    <div class="monitor"><canvas class="mon-cv" width="90" height="176"></canvas><div class="mon-tag"></div></div>
+  </div>
+
+  <div id="controls-hint">
+    <span><b>←→</b> move</span><span><b>↑</b>/<b>X</b> rotate</span><span><b>Z</b> rotate ccw</span>
+    <span><b>↓</b> soft drop</span><span><b>SPACE</b> hard drop</span><span><b>P</b> pause</span><span><b>M</b> mute</span><span><b>F11</b> fullscreen</span>
+  </div>
+
+  <div id="danger-vignette"></div>
+  <div id="spin-flash"></div>
+</div>
+
+<div id="title-screen">
+  <div class="title-inner">
+    <h1 id="logo">OBELISK</h1>
+    <div class="tagline">FOUR FACES &middot; ONE SURVIVOR</div>
+    <div class="rules">
+      Four games of Tetris fall at once — one on every face of the obelisk.<br>
+      You only command the face before you. Clear a line and the obelisk
+      <em>turns</em> to a random face. The other three keep falling in the dark.<br>
+      If <b>any</b> face tops out, it ends.
+    </div>
+    <div class="press" id="press-start">PRESS <b>ENTER</b> TO BEGIN</div>
+    <div class="best" id="best-line"></div>
+  </div>
+</div>
+
+<div id="countdown" class="hidden"></div>
+
+<div id="gameover-screen" class="hidden">
+  <div class="title-inner">
+    <div class="go-head">THE OBELISK FALLS</div>
+    <div class="go-cause" id="go-cause">FACE I WAS OVERRUN</div>
+    <div class="go-stats">
+      <div class="go-stat"><div class="hud-label">SURVIVED</div><div class="go-num" id="go-time">00:00.0</div></div>
+      <div class="go-stat"><div class="hud-label">TOTAL LINES</div><div class="go-num" id="go-lines">0</div></div>
+      <div class="go-stat"><div class="hud-label">VELOCITY</div><div class="go-num" id="go-level">1</div></div>
+    </div>
+    <div class="go-faces" id="go-faces"></div>
+    <div class="best" id="go-best"></div>
+    <div class="press">PRESS <b>ENTER</b> TO RISE AGAIN</div>
+  </div>
+</div>
+
+<div id="pause-screen" class="hidden"><div class="pause-text">SUSPENDED<div class="press">PRESS <b>P</b> TO RESUME</div></div></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OBELISK",
+  "version": "1.0.0",
+  "identifier": "com.dst3alth.obelisk",
+  "build": {
+    "frontendDist": "../www"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "OBELISK — four faces · one survivor",
+        "width": 1600,
+        "height": 1000,
+        "minWidth": 1100,
+        "minHeight": 760,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "backgroundColor": "#030409"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  }
+}

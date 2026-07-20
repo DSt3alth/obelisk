@@ -1,0 +1,234 @@
+:root {
+  --accent: #22d3ee;
+  --accent-dim: rgba(34, 211, 238, 0.35);
+  --ink: #e8f6ff;
+  --panel-bg: rgba(8, 12, 22, 0.55);
+  --panel-edge: rgba(255, 255, 255, 0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: #030409;
+  color: var(--ink);
+  font-family: "Segoe UI", "Inter", system-ui, sans-serif;
+  cursor: default;
+}
+
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+.hidden { display: none !important; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+
+.hud-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.42em;
+  color: rgba(232, 246, 255, 0.55); text-indent: 0.42em;
+}
+.hud-sub {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.38em;
+  color: rgba(232, 246, 255, 0.4); text-indent: 0.38em; margin-top: 2px;
+}
+
+#timer-wrap {
+  position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+  text-align: center;
+  padding: 14px 42px 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-edge);
+  border-top: none;
+  border-radius: 0 0 18px 18px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 40px rgba(0,0,0,0.5), inset 0 -1px 0 var(--accent-dim);
+}
+#timer {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 52px; font-weight: 700; line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 0 18px var(--accent), 0 0 55px var(--accent-dim);
+  transition: text-shadow 0.4s;
+}
+#timer .tenths { font-size: 30px; opacity: 0.65; }
+
+.side-panel {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  text-align: center;
+  padding: 22px 26px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-edge);
+  border-radius: 16px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 40px rgba(0,0,0,0.45);
+  min-width: 150px;
+}
+.side-panel.left  { left: 3vw;  border-left: 2px solid var(--accent); }
+.side-panel.right { right: 3vw; border-right: 2px solid rgba(255,255,255,0.25); }
+
+.face-tag { margin-top: 10px; }
+#face-glyph {
+  display: inline-block;
+  font-family: Georgia, serif;
+  font-size: 34px; font-weight: 700; font-style: italic;
+  color: var(--accent);
+  text-shadow: 0 0 16px var(--accent);
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.big-num {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 58px; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(255,255,255,0.35);
+}
+.mid-num {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 34px; font-weight: 700;
+  color: #fff; text-shadow: 0 0 12px rgba(255,255,255,0.3);
+}
+.hud-label.lvl { margin-top: 18px; }
+
+@keyframes pop { 0% { transform: scale(1); } 35% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.pop { animation: pop 0.35s ease-out; }
+
+/* ---------- side monitors ---------- */
+#monitors {
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 18px;
+}
+.monitor {
+  position: relative;
+  padding: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  transition: box-shadow 0.25s, border-color 0.25s;
+}
+.monitor.warning {
+  border-color: rgba(255, 60, 60, 0.9);
+  box-shadow: 0 0 22px rgba(255, 40, 40, 0.55);
+  animation: warnPulse 0.7s ease-in-out infinite alternate;
+}
+@keyframes warnPulse {
+  from { box-shadow: 0 0 10px rgba(255,40,40,0.3); }
+  to   { box-shadow: 0 0 30px rgba(255,40,40,0.8); }
+}
+.mon-cv { display: block; border-radius: 5px; }
+.mon-tag {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  font-family: Georgia, serif; font-style: italic; font-weight: 700;
+  font-size: 15px; text-shadow: 0 0 8px currentColor;
+}
+
+/* ---------- hints ---------- */
+#controls-hint {
+  position: absolute; bottom: 14px; right: 20px;
+  display: flex; gap: 14px;
+  font-size: 11px; letter-spacing: 0.08em;
+  color: rgba(232,246,255,0.35);
+}
+#controls-hint b { color: rgba(232,246,255,0.7); font-weight: 600; }
+
+/* ---------- danger + spin fx ---------- */
+#danger-vignette {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 20, 30, 0.35) 100%);
+  transition: opacity 0.5s;
+}
+#danger-vignette.on { opacity: 1; animation: dangerBreath 0.9s ease-in-out infinite alternate; }
+@keyframes dangerBreath { from { opacity: 0.45; } to { opacity: 1; } }
+
+#spin-flash {
+  position: absolute; inset: 0; opacity: 0; background: #fff; mix-blend-mode: screen;
+}
+#spin-flash.go { animation: flash 0.55s ease-out; }
+@keyframes flash { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+
+/* ---------- full screen states ---------- */
+#title-screen, #gameover-screen, #pause-screen {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 50% 40%, rgba(10,16,32,0.25) 0%, rgba(2,3,8,0.88) 78%);
+  text-align: center;
+}
+.title-inner { max-width: 720px; padding: 0 30px; }
+
+#logo {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(52px, 8.5vw, 108px);
+  font-weight: 700;
+  white-space: nowrap;
+  width: max-content;
+  margin: 0 auto;
+  letter-spacing: 0.26em; text-indent: 0.26em;
+  background: linear-gradient(180deg, #ffffff 0%, #a5f3fc 38%, #22d3ee 60%, #0e7490 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 26px rgba(34,211,238,0.55)) drop-shadow(0 4px 40px rgba(0,0,0,0.8));
+  animation: logoBreath 4s ease-in-out infinite alternate;
+}
+@keyframes logoBreath {
+  from { filter: drop-shadow(0 0 16px rgba(34,211,238,0.35)) drop-shadow(0 4px 40px rgba(0,0,0,0.8)); }
+  to   { filter: drop-shadow(0 0 40px rgba(34,211,238,0.8))  drop-shadow(0 4px 40px rgba(0,0,0,0.8)); }
+}
+.tagline {
+  margin-top: 6px;
+  font-size: 15px; font-weight: 600; letter-spacing: 0.52em; text-indent: 0.52em;
+  color: rgba(232,246,255,0.6);
+}
+.rules {
+  margin: 38px auto 0; max-width: 620px;
+  font-size: 15px; line-height: 1.75; color: rgba(232,246,255,0.75);
+}
+.rules b, .rules em { color: #a5f3fc; font-style: normal; }
+
+.press {
+  margin-top: 42px;
+  font-size: 16px; letter-spacing: 0.34em; text-indent: 0.34em;
+  color: rgba(232,246,255,0.85);
+  animation: pressBlink 1.6s ease-in-out infinite;
+}
+.press b { color: #a5f3fc; }
+@keyframes pressBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.best { margin-top: 26px; font-size: 13px; letter-spacing: 0.24em; color: rgba(251, 191, 36, 0.85); }
+
+/* countdown */
+#countdown {
+  position: fixed; inset: 0; z-index: 25;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  font-family: Georgia, serif;
+  font-size: 160px; font-weight: 700; color: #fff;
+  text-shadow: 0 0 60px var(--accent);
+}
+#countdown.tick { animation: cdPop 0.9s ease-out; }
+@keyframes cdPop { 0% { transform: scale(1.6); opacity: 0; } 20% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* game over */
+.go-head {
+  font-family: Georgia, serif;
+  font-size: clamp(40px, 6vw, 64px); font-weight: 700;
+  letter-spacing: 0.2em; text-indent: 0.2em;
+  color: #fecaca;
+  text-shadow: 0 0 30px rgba(239, 68, 68, 0.7);
+}
+.go-cause { margin-top: 10px; font-size: 14px; letter-spacing: 0.4em; text-indent: 0.4em; color: rgba(252, 165, 165, 0.8); }
+.go-stats { display: flex; gap: 44px; justify-content: center; margin-top: 40px; }
+.go-num {
+  font-family: Consolas, monospace; font-size: 44px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: #fff;
+  text-shadow: 0 0 16px rgba(255,255,255,0.4); margin-top: 6px;
+}
+.go-faces { display: flex; gap: 26px; justify-content: center; margin-top: 30px; }
+.go-face { font-family: Consolas, monospace; font-size: 18px; font-weight: 700; }
+.go-face .glyph { font-family: Georgia, serif; font-style: italic; margin-right: 8px; text-shadow: 0 0 10px currentColor; }
+
+.pause-text {
+  font-family: Georgia, serif; font-size: 54px; font-weight: 700;
+  letter-spacing: 0.4em; text-indent: 0.4em; color: #e8f6ff;
+  text-shadow: 0 0 30px rgba(165, 243, 252, 0.6);
+}
