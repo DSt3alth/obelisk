@@ -1,4 +1,7 @@
 // OBELISK — draws one Board onto its face canvas (used as a CanvasTexture).
+// Blocks are pre-rendered sprites (glow baked in) so every face can redraw at
+// full frame rate; the falling piece is drawn at interpolated sub-cell
+// positions for silk-smooth motion.
 import { COLS, ROWS, PIECE_COLORS } from './tetris.js';
 
 export const CELL = 46;
@@ -9,6 +12,7 @@ export const CV_W = COLS * CELL + PAD_X * 2;          // 552
 export const CV_H = ROWS * CELL + PAD_TOP + PAD_BOT;  // 1084
 
 const CLEAR_FLASH_MS = 320;
+const GLOW = 18; // sprite padding so baked glow isn't clipped
 
 function hexToRgb(hex) {
   return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
@@ -16,6 +20,44 @@ function hexToRgb(hex) {
 function rgba(hex, a) {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
+}
+
+/* ---------------- block sprite cache ---------------- */
+let SPRITES = null;
+
+function mkSprite(colorIdx, glow) {
+  const color = PIECE_COLORS[colorIdx];
+  const s = CELL - 4;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = CELL + GLOW * 2;
+  const c = cv.getContext('2d');
+  const x = GLOW + 2, y = GLOW + 2, r = 7;
+
+  c.beginPath();
+  c.roundRect(x, y, s, s, r);
+  const g = c.createLinearGradient(x, y, x, y + s);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.18, color);
+  g.addColorStop(1, rgba(color, 0.55));
+  c.fillStyle = g;
+  c.shadowColor = color;
+  c.shadowBlur = 14 * glow;
+  c.fill();
+  c.shadowBlur = 0;
+
+  c.beginPath();
+  c.roundRect(x + 4, y + 4, s - 8, s - 8, r - 3);
+  c.strokeStyle = 'rgba(255,255,255,0.28)';
+  c.lineWidth = 2;
+  c.stroke();
+  return cv;
+}
+
+function buildSprites() {
+  SPRITES = {};
+  for (let i = 1; i <= 7; i++) {
+    SPRITES[i] = { stack: mkSprite(i, 0.55), auto: mkSprite(i, 0.85), live: mkSprite(i, 1.5) };
+  }
 }
 
 export class FaceRenderer {
@@ -27,6 +69,9 @@ export class FaceRenderer {
     this.canvas.height = CV_H;
     this.ctx = this.canvas.getContext('2d');
     this.bg = this.#makeBackground();
+    if (!SPRITES) buildSprites();
+    this.visX = 0;        // smooth horizontal position of the falling piece
+    this.lastSeq = -1;
   }
 
   #makeBackground() {
@@ -82,52 +127,14 @@ export class FaceRenderer {
     c.fillText(this.def.glyph, PAD_X, PAD_TOP / 2 + 4);
     c.shadowBlur = 0;
 
-    // "LINES" caption under glyph area (right side holds NEXT box, drawn live)
     c.font = '600 20px "Segoe UI", sans-serif';
     c.fillStyle = 'rgba(220,235,255,0.4)';
     c.fillText('L I N E S', PAD_X + 96, PAD_TOP / 2 + 22);
     return cv;
   }
 
-  #block(c, px, py, colorIdx, { ghost = false, glow = 1, alpha = 1 } = {}) {
-    const color = PIECE_COLORS[colorIdx];
-    const s = CELL - 4;
-    const x = px + 2, y = py + 2, r = 7;
-
-    c.save();
-    c.globalAlpha = alpha;
-    c.beginPath();
-    c.roundRect(x, y, s, s, r);
-
-    if (ghost) {
-      c.strokeStyle = rgba(color, 0.5);
-      c.lineWidth = 2;
-      c.setLineDash([6, 5]);
-      c.stroke();
-      c.restore();
-      return;
-    }
-
-    const g = c.createLinearGradient(x, y, x, y + s);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.18, color);
-    g.addColorStop(1, rgba(color, 0.55));
-    c.fillStyle = g;
-    c.shadowColor = color;
-    c.shadowBlur = 14 * glow;
-    c.fill();
-    c.shadowBlur = 0;
-
-    // inner bevel
-    c.beginPath();
-    c.roundRect(x + 4, y + 4, s - 8, s - 8, r - 3);
-    c.strokeStyle = 'rgba(255,255,255,0.28)';
-    c.lineWidth = 2;
-    c.stroke();
-    c.restore();
-  }
-
-  draw(now) {
+  // fallFrac: 0..1 progress toward the next gravity row (sub-cell interpolation)
+  draw(now, fallFrac = 0, dtSec = 0.016) {
     const { ctx: c, board } = this;
     const { accent } = this.def;
     c.clearRect(0, 0, CV_W, CV_H);
@@ -149,30 +156,24 @@ export class FaceRenderer {
     c.fillStyle = 'rgba(220,235,255,0.4)';
     c.fillText('N E X T', CV_W - PAD_X - 150, PAD_TOP / 2 - 30);
     if (board.nextName) {
-      const mini = 22;
+      const mini = 22, scale = mini / CELL;
       const baseX = CV_W - PAD_X - 150, baseY = PAD_TOP / 2 - 14;
       const cells = PREVIEW_CELLS[board.nextName];
       const idx = 'IOTSZJL'.indexOf(board.nextName) + 1;
+      const spr = SPRITES[idx].auto;
       for (const [cx, cy] of cells) {
-        const color = PIECE_COLORS[idx];
-        c.fillStyle = rgba(color, 0.9);
-        c.shadowColor = color;
-        c.shadowBlur = 8;
-        c.beginPath();
-        c.roundRect(baseX + cx * mini, baseY + cy * mini, mini - 3, mini - 3, 4);
-        c.fill();
-        c.shadowBlur = 0;
+        c.drawImage(spr, baseX + cx * mini - GLOW * scale, baseY + cy * mini - GLOW * scale, spr.width * scale, spr.height * scale);
       }
     }
 
     // settled stack
     for (let y = 0; y < ROWS; y++) {
       const isClearing = board.clearing && board.clearing.rows.includes(y);
+      if (isClearing) continue;
+      const row = board.grid[y];
       for (let x = 0; x < COLS; x++) {
-        const v = board.grid[y][x];
-        if (!v) continue;
-        if (isClearing) continue; // drawn as flash below
-        this.#block(c, wx + x * CELL, wy + y * CELL, v, { glow: 0.55 });
+        const v = row[x];
+        if (v) c.drawImage(SPRITES[v].stack, wx + x * CELL - GLOW, wy + y * CELL - GLOW);
       }
     }
 
@@ -191,17 +192,42 @@ export class FaceRenderer {
       }
     }
 
-    // ghost + active piece
+    // ghost + falling piece (interpolated for smoothness)
     if (board.piece && !board.toppedOut) {
-      if (board.controlled) {
-        const gy = board.ghostY();
-        for (const [cx, cy] of board.cells({ ...board.piece, y: gy })) {
-          if (cy >= 0) this.#block(c, wx + cx * CELL, wy + cy * CELL, board.piece.color, { ghost: true });
+      const p = board.piece;
+      if (board.pieceSeq !== this.lastSeq) { this.lastSeq = board.pieceSeq; this.visX = p.x; }
+      this.visX += (p.x - this.visX) * Math.min(1, dtSec * 26);
+      if (Math.abs(p.x - this.visX) < 0.02) this.visX = p.x;
+
+      const gy = board.ghostY();
+      const renderY = Math.min(p.y + Math.max(0, Math.min(1, fallFrac)), gy);
+      const dx = (this.visX - p.x) * CELL;
+      const dy = (renderY - p.y) * CELL;
+
+      c.save();
+      c.beginPath();
+      c.rect(wx - GLOW, wy - 6, COLS * CELL + GLOW * 2, ROWS * CELL + GLOW + 6);
+      c.clip();
+
+      if (board.controlled && gy > p.y) {
+        for (const [cx, cy] of board.cells({ ...p, y: gy })) {
+          if (cy < 0) continue;
+          c.beginPath();
+          c.roundRect(wx + cx * CELL + 2, wy + cy * CELL + 2, CELL - 4, CELL - 4, 7);
+          c.strokeStyle = rgba(PIECE_COLORS[p.color], 0.5);
+          c.lineWidth = 2;
+          c.setLineDash([6, 5]);
+          c.stroke();
+          c.setLineDash([]);
         }
       }
+
+      const spr = board.controlled ? 'live' : 'auto';
       for (const [cx, cy] of board.cells()) {
-        if (cy >= 0) this.#block(c, wx + cx * CELL, wy + cy * CELL, board.piece.color, { glow: board.controlled ? 1.4 : 0.8 });
+        if (cy * CELL + dy < -CELL) continue;
+        c.drawImage(SPRITES[p.color][spr], wx + cx * CELL + dx - GLOW, wy + cy * CELL + dy - GLOW);
       }
+      c.restore();
     }
 
     // danger tint when the stack runs high

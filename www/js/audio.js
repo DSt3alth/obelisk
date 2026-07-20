@@ -97,6 +97,17 @@ class AudioEngine {
   warning() { if (!this.ctx) return; const t = this.ctx.currentTime; this.#osc('square', 880, t, 0.11, 0.1, 830); this.#osc('square', 880, t + 0.16, 0.11, 0.1, 830); }
   levelUp() { if (!this.ctx) return; const t = this.ctx.currentTime; [440, 554, 659, 880].forEach((f, i) => this.#osc('triangle', f, t + i * 0.07, 0.4, 0.1)); }
 
+  fanfare() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const seq = [[523.25, 0], [659.25, 0.12], [783.99, 0.24], [1046.5, 0.36], [1318.5, 0.6]];
+    for (const [f, dt] of seq) {
+      this.#osc('triangle', f, t + dt, 0.55, 0.16);
+      this.#osc('sine', f * 2, t + dt, 0.4, 0.05);
+    }
+    this.#noise(t + 0.6, 0.9, 0.12, 3000, 0.5, 8000);
+  }
+
   gameOver() {
     if (!this.ctx) return;
     this.stopMusic();

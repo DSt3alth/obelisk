@@ -63,7 +63,16 @@ export class Stage {
     this.composer.addPass(new OutputPass());
 
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    this.onResize = () => this.resize();
+    window.addEventListener('resize', this.onResize);
+  }
+
+  dispose() {
+    window.removeEventListener('resize', this.onResize);
+    this.textures.forEach(t => t.dispose());
+    this.composer.dispose?.();
+    this.renderer.dispose();
+    this.renderer.forceContextLoss?.();
   }
 
   #buildObelisk(faceCanvases) {
@@ -340,7 +349,9 @@ export class Stage {
   }
 
   resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const el = this.renderer.domElement.parentElement;
+    const w = el?.clientWidth || window.innerWidth;
+    const h = el?.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;

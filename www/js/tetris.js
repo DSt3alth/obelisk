@@ -66,9 +66,10 @@ export class Board {
     this.toppedOut = false;
     this.controlled = false;
     this.autoPlan = null;    // {rot, x} target for autopilot
-    this.clearing = null;    // {rows:[..], t0} — flash animation state
+    this.clearing = null;    // {rows, t0, wasControlled} — flash animation state
     this.dirty = true;       // needs 2D redraw
     this.justLocked = false;
+    this.pieceSeq = 0;       // bumps every spawn (renderer resets its smoothing)
     this.spawn();
   }
 
@@ -100,6 +101,7 @@ export class Board {
       if (this.collides(piece)) { this.toppedOut = true; this.piece = piece; this.dirty = true; return; }
     }
     this.piece = piece;
+    this.pieceSeq++;
     if (!this.controlled) this.autoPlan = this.#planAuto();
     this.dirty = true;
   }
@@ -164,7 +166,7 @@ export class Board {
     const rows = [];
     for (let y = 0; y < ROWS; y++) if (this.grid[y].every(v => v)) rows.push(y);
     if (rows.length) {
-      this.clearing = { rows, t0: performance.now() };
+      this.clearing = { rows, t0: performance.now(), wasControlled: this.controlled };
       return { locked: true, cleared: rows.length };
     }
     this.spawn();
@@ -235,7 +237,7 @@ export class Board {
   debugFillBottom() {
     const y = ROWS - 1;
     for (let x = 0; x < COLS; x++) this.grid[y][x] = ((x % 7) + 1);
-    this.clearing = { rows: [y], t0: performance.now() };
+    this.clearing = { rows: [y], t0: performance.now(), wasControlled: this.controlled };
     this.piece = null;
     this.dirty = true;
   }
