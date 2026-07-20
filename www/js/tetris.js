@@ -343,8 +343,9 @@ export class Board {
       b2bApplied = difficult && this.b2b;
       this.b2b = difficult;
     } else {
+      // A placement that clears nothing resets the combo but leaves the
+      // back-to-back chain intact — only a non-difficult CLEAR breaks it.
       this.combo = -1;
-      if (!tspin) this.b2b = this.b2b; // a spin with no lines preserves the chain
     }
 
     if (rows.length) {

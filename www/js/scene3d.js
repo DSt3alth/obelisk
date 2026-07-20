@@ -13,6 +13,8 @@ import { CV_W, CV_H } from './render2d.js';
 const FACE_SLOT = [4, 1, 5, 0]; // face k -> box material slot
 const OB_W = 2.15;
 const OB_H = OB_W * (CV_H / CV_W);
+const DANGER_RED = new THREE.Color(0xff2a3a);
+const ECLIPSE_WHITE = new THREE.Color(0xdff0ff);
 
 function easeSpin(t) {
   const c = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -344,9 +346,10 @@ export class Stage {
   }
 
   setAccent(hex) {
-    this.edgeMat.color.set(hex);
-    this.accentLight.color.set(hex);
-    this.ring.material.color.set(hex);
+    this.baseAccent = new THREE.Color(hex);
+    this.edgeMat.color.copy(this.baseAccent);
+    this.accentLight.color.copy(this.baseAccent);
+    this.ring.material.color.copy(this.baseAccent);
   }
 
   // Trauma accumulates; shake is trauma^2 so small events barely register and
@@ -440,8 +443,24 @@ export class Stage {
     u.uGrain.value = 0.05 + this.danger * 0.03;
 
     this.bloom.strength = 0.85 + this.pulse * 0.22 + this.eclipse * 0.5 + this.flash * 0.8;
-    this.edgeMat.color.offsetHSL(0, 0, 0); // keep material live
-    this.accentLight.intensity = 18 + this.pulse * 10 + this.eclipse * 14;
+
+    // The stone itself reacts: its edges run hot as a face fills, and go
+    // bone-white and cold while the Eclipse holds.
+    if (this.baseAccent) {
+      const c = this._edgeTmp || (this._edgeTmp = new THREE.Color());
+      c.copy(this.baseAccent);
+      if (this.danger > 0.01) {
+        c.lerp(DANGER_RED, this.danger * 0.85 * (0.75 + 0.25 * Math.sin(now / 120)));
+      }
+      if (this.eclipse > 0.01) c.lerp(ECLIPSE_WHITE, this.eclipse * 0.9);
+      const heat = 1 + this.pulse * 0.35 + this.flash * 1.2;
+      this.edgeMat.color.copy(c).multiplyScalar(heat);
+      this.accentLight.color.copy(c);
+    }
+    this.accentLight.intensity = 18 + this.pulse * 10 + this.eclipse * 14 + this.danger * 12;
+    // keep the fog shift subtle — a strong tint draws a visible horizon line
+    // where the mirror plane ends
+    this.scene.fog.color.setRGB(0.008 + this.danger * 0.018, 0.012, 0.04);
 
     this.#stepParticles(dt);
     this.composer.render();
