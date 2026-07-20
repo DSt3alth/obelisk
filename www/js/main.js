@@ -14,6 +14,20 @@ const FACES = [
   { glyph: 'IV',  accent: '#34d399' },
 ];
 
+// Faces around the obelisk in screen left-to-right (CW) order — verified
+// against the render: from I, IV is to the right, II to the left, III behind.
+// next in RING = the face physically on your right.
+const RING = [0, 3, 2, 1];
+function neighbours(face) {
+  const i = RING.indexOf(face);
+  return {
+    current: face,
+    right: RING[(i + 1) % 4],
+    behind: RING[(i + 2) % 4],
+    left: RING[(i + 3) % 4],
+  };
+}
+
 const CLEAR_FLASH_MS = 320;
 const BASE_GRAVITY = 820;
 const LEVEL_EVERY = 30_000;
@@ -144,9 +158,12 @@ class Player {
     this.popupsEl = q('.popups');
     this.eclFill = q('.ecl-fill');
     this.leftPanel = q('.side-panel.left');
-    this.monitors = [...pane.querySelectorAll('.monitor')];
-    this.monCvs = this.monitors.map(m => m.querySelector('.mon-cv').getContext('2d'));
-    this.monTags = this.monitors.map(m => m.querySelector('.mon-tag'));
+    this.mon = {};
+    for (const role of ['behind', 'left', 'current', 'right']) {
+      const el = pane.querySelector('.monitor.' + role);
+      const canvas = el.querySelector('.mon-cv');
+      this.mon[role] = { el, canvas, cv: canvas.getContext('2d'), tag: el.querySelector('.mon-tag') };
+    }
 
     this.boards = FACES.map((_, i) => new Board(i));
     this.renderers = this.boards.map((b, i) => new FaceRenderer(b, FACES[i]));
@@ -335,22 +352,28 @@ class Player {
 
   /* ---- monitors + danger ---- */
   drawMonitors(now) {
-    const others = [0, 1, 2, 3].filter(i => i !== this.currentFace);
-    let worst = 0;
-    others.forEach((fi, mi) => {
+    // Compass: current face dead-centre, neighbours in their true positions,
+    // so a spin never disorients — the layout is spatially stable.
+    const map = neighbours(this.currentFace);
+    let worstHidden = 0;
+    for (const role of ['behind', 'left', 'current', 'right']) {
+      const fi = map[role];
       const b = this.boards[fi];
-      const c = this.monCvs[mi];
+      const m = this.mon[role];
       const src = this.renderers[fi].canvas;
-      c.clearRect(0, 0, 90, 176);
-      c.drawImage(src, 0, 0, src.width, src.height, 0, 0, 90, 176);
-      this.monTags[mi].textContent = FACES[fi].glyph;
-      this.monTags[mi].style.color = FACES[fi].accent;
+      const cw = m.canvas.width, ch = m.canvas.height;
+      m.cv.clearRect(0, 0, cw, ch);
+      m.cv.drawImage(src, 0, 0, src.width, src.height, 0, 0, cw, ch);
+      m.tag.textContent = FACES[fi].glyph;
+      m.tag.style.color = FACES[fi].accent;
       const h = b.stackHeight();
-      worst = Math.max(worst, h);
-      this.monitors[mi].classList.toggle('warning', h >= 15);
-    });
+      if (role !== 'current') {
+        worstHidden = Math.max(worstHidden, h);
+        m.el.classList.toggle('warning', h >= 15);
+      }
+    }
     const selfH = this.board.stackHeight();
-    worst = Math.max(worst, selfH);
+    const worst = Math.max(worstHidden, selfH);
     const danger = Math.max(0, Math.min(1, (worst - 12) / 7));
     this.vignetteEl.classList.toggle('on', worst >= 15);
     this.stage.setDanger(this.eclipseOn ? 0 : danger);

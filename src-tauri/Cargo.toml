@@ -1,6 +1,6 @@
 [package]
 name = "obelisk"
-version = "2.0.0"
+version = "2.1.0"
 description = "OBELISK — four faces of falling blocks. Survive the monolith."
 edition = "2021"
 
