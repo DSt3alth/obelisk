@@ -26,13 +26,19 @@
       <div class="hud-label">THIS FACE</div>
       <div class="face-tag"><span class="face-glyph">I</span></div>
       <div class="big-num face-lines">0</div>
-      <div class="hud-sub">LINES</div>
+      <div class="hud-sub">COURSES</div>
+      <div class="eclipse-wrap">
+        <div class="hud-label ecl-label">ECLIPSE</div>
+        <div class="ecl-bar"><div class="ecl-fill"></div><div class="ecl-ticks"><i></i><i></i><i></i></div></div>
+        <div class="ecl-key">SHIFT</div>
+      </div>
     </div>
     <div class="side-panel right hud-bit">
-      <div class="hud-label">ALL FACES</div>
-      <div class="big-num total-lines">0</div>
-      <div class="hud-sub">TOTAL LINES</div>
-      <div class="hud-label lvl">VELOCITY</div>
+      <div class="hud-label">SCORE</div>
+      <div class="big-num score-num">0</div>
+      <div class="hud-label lvl">ALL FACES</div>
+      <div class="mid-num total-lines">0</div>
+      <div class="hud-label lvl">DESCENT</div>
       <div class="mid-num level">1</div>
     </div>
     <div class="monitors hud-bit">
@@ -40,6 +46,12 @@
       <div class="monitor"><canvas class="mon-cv" width="90" height="176"></canvas><div class="mon-tag"></div></div>
       <div class="monitor"><canvas class="mon-cv" width="90" height="176"></canvas><div class="mon-tag"></div></div>
     </div>
+    <div class="combo-cluster">
+      <div class="combo-num"></div>
+      <div class="combo-label"></div>
+    </div>
+    <div class="popups"></div>
+    <div class="near-miss"></div>
     <div class="danger-vignette"></div>
     <div class="spin-flash"></div>
   </div>
@@ -47,48 +59,112 @@
 
 <div id="hud-global" class="hidden">
   <div id="timer-wrap">
-    <div class="hud-label">SURVIVED</div>
+    <div class="hud-label">AT THE POST</div>
     <div id="timer">00:00<span class="tenths">.0</span></div>
   </div>
   <div id="controls-hint"></div>
 </div>
 
+<div id="eclipse-overlay" class="hidden">
+  <div class="ecl-word">ECLIPSE</div>
+  <div class="ecl-sub">IT CANNOT SEE YOU</div>
+  <div class="ecl-timer"><div class="ecl-timer-fill"></div></div>
+  <div class="ecl-bank"><span id="ecl-bank-num">0</span><small>COURSES HELD</small></div>
+</div>
+
+<div id="payout" class="hidden">
+  <div id="payout-name"></div>
+  <div id="payout-lines"></div>
+  <div id="payout-score"></div>
+</div>
+
+<div id="whisper"></div>
 <div id="fps-meter"><span id="fps-num">—</span> FPS <span class="fps-hint">F3</span></div>
 
+<!-- ============ TITLE ============ -->
 <div id="title-screen">
   <div class="title-inner">
     <h1 id="logo">OBELISK</h1>
     <div class="tagline">FOUR FACES &middot; ONE SURVIVOR</div>
+
+    <div id="keeper-strip">
+      <div class="keeper-rank"><span id="rank-name">SUPPLICANT</span></div>
+      <div class="keeper-bar"><div id="rank-fill"></div></div>
+      <div class="keeper-meta">
+        <span id="rank-next"></span>
+        <span id="frag-count"></span>
+      </div>
+    </div>
+
     <div id="mode-cards">
       <div class="mode-card" data-mode="rite">
         <div class="mode-name">RITE</div>
-        <div class="mode-desc">The classic torment. Every line you clear turns the obelisk to a random face.</div>
+        <div class="mode-desc">The duty as written. Every course you seal turns the stone to a random face.</div>
       </div>
       <div class="mode-card" data-mode="sovereign">
         <div class="mode-name">SOVEREIGN</div>
-        <div class="mode-desc">You command the turns. Spin the obelisk yourself with <b>Q / E</b> and tend all four faces.</div>
+        <div class="mode-desc">You command the turning. <b>Q / E</b> to turn the obelisk yourself. Tend all four.</div>
       </div>
       <div class="mode-card" data-mode="duel">
         <div class="mode-name">DUEL</div>
-        <div class="mode-desc">Two players, two obelisks. Your clears spin your rival's tower. Last monolith standing.</div>
+        <div class="mode-desc">Two Keepers, two obelisks. Your courses turn your rival's stone. Last one standing.</div>
+      </div>
+      <div class="mode-card" data-mode="daily">
+        <div class="mode-name">THE SEAL</div>
+        <div class="mode-desc">One sealed sequence, the same for every Keeper today. Three minutes. One attempt.</div>
+        <div class="mode-badge" id="daily-badge"></div>
       </div>
     </div>
-    <div id="lb-panel">
-      <div class="lb-title" id="lb-title">ETCHED IN STONE</div>
-      <ol id="lb-list"></ol>
+
+    <div id="title-cols">
+      <div id="lb-panel">
+        <div class="lb-title" id="lb-title">ETCHED IN STONE</div>
+        <ol id="lb-list"></ol>
+      </div>
     </div>
-    <div class="press">PRESS <b>ENTER</b> TO BEGIN &middot; ↑↓ CHOOSE MODE &middot; 🎮 SUPPORTED</div>
+
+    <div class="press">
+      <b>ENTER</b> BEGIN &middot; <b>←→</b> MODE &middot; <b>C</b> THE RECORD &middot; <b>H</b> HANDLING &middot; 🎮
+    </div>
+  </div>
+</div>
+
+<!-- ============ CODEX ============ -->
+<div id="codex-screen" class="hidden">
+  <div class="codex-inner">
+    <div class="codex-head">
+      <div class="codex-title">THE RECORD OF THE KEEPERS</div>
+      <div class="codex-sub" id="codex-sub"></div>
+    </div>
+    <div class="codex-body">
+      <div class="codex-list" id="codex-list"></div>
+      <div class="codex-read" id="codex-read">
+        <div class="codex-placeholder">Select an entry.</div>
+      </div>
+    </div>
+    <div class="press">↑↓ SELECT &middot; <b>ESC</b> BACK</div>
+  </div>
+</div>
+
+<!-- ============ HANDLING ============ -->
+<div id="handling-screen" class="hidden">
+  <div class="title-inner">
+    <div class="entry-head" style="font-size:30px">HANDLING</div>
+    <div class="entry-sub">TUNE THE HANDS. CHANGES SAVE IMMEDIATELY.</div>
+    <div id="handling-list"></div>
+    <div class="press">↑↓ SELECT &middot; <b>←→</b> ADJUST &middot; <b>ESC</b> BACK</div>
   </div>
 </div>
 
 <div id="countdown" class="hidden"></div>
 
+<!-- ============ NAME ENTRY ============ -->
 <div id="entry-screen" class="hidden">
   <div class="title-inner">
-    <div class="entry-head">YOUR NAME IS ETCHED IN STONE</div>
-    <div class="entry-sub" id="entry-sub">RANKED SURVIVAL</div>
-    <input id="name-input" maxlength="12" spellcheck="false" autocomplete="off" placeholder="WANDERER">
-    <div class="press">ENTER TO INSCRIBE &middot; ESC TO STAY NAMELESS</div>
+    <div class="entry-head">CUT YOUR MARK</div>
+    <div class="entry-sub" id="entry-sub"></div>
+    <input id="name-input" maxlength="12" spellcheck="false" autocomplete="off" placeholder="KEEPER">
+    <div class="press">ENTER TO CUT &middot; ESC TO GO UNRECORDED</div>
   </div>
 </div>
 
@@ -96,7 +172,9 @@
   <div class="title-inner" id="go-content"></div>
 </div>
 
-<div id="pause-screen" class="hidden"><div class="pause-text">SUSPENDED<div class="press">PRESS <b>P</b> TO RESUME &middot; <b>ESC</b> FOR MODES</div></div></div>
+<div id="pause-screen" class="hidden">
+  <div class="pause-text">SUSPENDED<div class="press">PRESS <b>P</b> TO RESUME &middot; <b>ESC</b> TO LEAVE THE POST</div></div>
+</div>
 
 <script type="module" src="js/main.js"></script>
 </body>

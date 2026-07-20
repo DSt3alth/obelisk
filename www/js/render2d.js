@@ -1,37 +1,34 @@
 // OBELISK — draws one Board onto its face canvas (used as a CanvasTexture).
-// Blocks are pre-rendered sprites (glow baked in) so every face can redraw at
-// full frame rate; the falling piece is drawn at interpolated sub-cell
-// positions for silk-smooth motion.
-import { COLS, ROWS, PIECE_COLORS } from './tetris.js';
+// Block sprites are pre-baked with their glow so every visible face can redraw
+// at display refresh; the falling piece is drawn at interpolated sub-cell
+// positions so motion is continuous.
+import { COLS, ROWS, PIECE_COLORS, LOCK_DELAY } from './tetris.js';
 
 export const CELL = 46;
 export const PAD_X = 42;
-export const PAD_TOP = 118;
-export const PAD_BOT = 46;
+export const PAD_TOP = 182;
+export const PAD_BOT = 62;
 export const CV_W = COLS * CELL + PAD_X * 2;          // 552
-export const CV_H = ROWS * CELL + PAD_TOP + PAD_BOT;  // 1084
+export const CV_H = ROWS * CELL + PAD_TOP + PAD_BOT;  // 1164
 
 const CLEAR_FLASH_MS = 320;
-const GLOW = 18; // sprite padding so baked glow isn't clipped
+const GLOW = 18;
 
-function hexToRgb(hex) {
-  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-}
 function rgba(hex, a) {
-  const [r, g, b] = hexToRgb(hex);
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${a})`;
 }
 
-/* ---------------- block sprite cache ---------------- */
+/* ---------------- sprite cache ---------------- */
 let SPRITES = null;
 
-function mkSprite(colorIdx, glow) {
+function mkSprite(colorIdx, glow, size = CELL) {
   const color = PIECE_COLORS[colorIdx];
-  const s = CELL - 4;
+  const s = size - 4;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = CELL + GLOW * 2;
+  cv.width = cv.height = size + GLOW * 2;
   const c = cv.getContext('2d');
-  const x = GLOW + 2, y = GLOW + 2, r = 7;
+  const x = GLOW + 2, y = GLOW + 2, r = Math.max(3, size * 0.15);
 
   c.beginPath();
   c.roundRect(x, y, s, s, r);
@@ -46,7 +43,7 @@ function mkSprite(colorIdx, glow) {
   c.shadowBlur = 0;
 
   c.beginPath();
-  c.roundRect(x + 4, y + 4, s - 8, s - 8, r - 3);
+  c.roundRect(x + 4, y + 4, s - 8, s - 8, Math.max(1, r - 3));
   c.strokeStyle = 'rgba(255,255,255,0.28)';
   c.lineWidth = 2;
   c.stroke();
@@ -56,23 +53,47 @@ function mkSprite(colorIdx, glow) {
 function buildSprites() {
   SPRITES = {};
   for (let i = 1; i <= 7; i++) {
-    SPRITES[i] = { stack: mkSprite(i, 0.55), auto: mkSprite(i, 0.85), live: mkSprite(i, 1.5) };
+    SPRITES[i] = {
+      stack: mkSprite(i, 0.55),
+      auto: mkSprite(i, 0.85),
+      live: mkSprite(i, 1.5),
+      inert: (() => {                       // greyed, for hold-locked
+        const cv = mkSprite(i, 0.2);
+        const c = cv.getContext('2d');
+        c.globalCompositeOperation = 'saturation';
+        c.fillStyle = '#808080';
+        c.fillRect(0, 0, cv.width, cv.height);
+        return cv;
+      })(),
+    };
   }
 }
+
+// Mini shapes for hold/next boxes (normalized cells + width in cells)
+const MINI = {
+  I: { cells: [[0, 1], [1, 1], [2, 1], [3, 1]], w: 4, h: 2 },
+  O: { cells: [[1, 0], [2, 0], [1, 1], [2, 1]], w: 4, h: 2 },
+  T: { cells: [[1, 0], [0, 1], [1, 1], [2, 1]], w: 3, h: 2 },
+  S: { cells: [[1, 0], [2, 0], [0, 1], [1, 1]], w: 3, h: 2 },
+  Z: { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], w: 3, h: 2 },
+  J: { cells: [[0, 0], [0, 1], [1, 1], [2, 1]], w: 3, h: 2 },
+  L: { cells: [[2, 0], [0, 1], [1, 1], [2, 1]], w: 3, h: 2 },
+};
 
 export class FaceRenderer {
   constructor(board, faceDef) {
     this.board = board;
-    this.def = faceDef; // {glyph, accent}
+    this.def = faceDef;
     this.canvas = document.createElement('canvas');
     this.canvas.width = CV_W;
     this.canvas.height = CV_H;
     this.ctx = this.canvas.getContext('2d');
     this.bg = this.#makeBackground();
     if (!SPRITES) buildSprites();
-    this.visX = 0;        // smooth horizontal position of the falling piece
-    this.visY = 0;        // smooth vertical position (soft drop glides, not steps)
+    this.visX = 0;
+    this.visY = 0;
     this.lastSeq = -1;
+    this.flashLines = 0;     // decays after a clear, drives the well flash
   }
 
   #makeBackground() {
@@ -88,19 +109,16 @@ export class FaceRenderer {
     c.fillStyle = g;
     c.fillRect(0, 0, CV_W, CV_H);
 
-    // faint accent aura behind the well
     const rg = c.createRadialGradient(CV_W / 2, CV_H * 0.45, 60, CV_W / 2, CV_H * 0.45, CV_H * 0.7);
     rg.addColorStop(0, rgba(accent, 0.10));
     rg.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = rg;
     c.fillRect(0, 0, CV_W, CV_H);
 
-    // well
     const wx = PAD_X, wy = PAD_TOP, ww = COLS * CELL, wh = ROWS * CELL;
     c.fillStyle = 'rgba(2,3,8,0.85)';
     c.fillRect(wx, wy, ww, wh);
 
-    // grid
     c.strokeStyle = 'rgba(150,180,255,0.055)';
     c.lineWidth = 1;
     c.beginPath();
@@ -108,7 +126,6 @@ export class FaceRenderer {
     for (let y = 1; y < ROWS; y++) { c.moveTo(wx, wy + y * CELL); c.lineTo(wx + ww, wy + y * CELL); }
     c.stroke();
 
-    // well frame
     c.strokeStyle = rgba(accent, 0.65);
     c.lineWidth = 3;
     c.shadowColor = accent;
@@ -119,58 +136,93 @@ export class FaceRenderer {
     c.lineWidth = 1;
     c.strokeRect(wx - 8, wy - 8, ww + 16, wh + 16);
 
-    // face glyph, top-left
-    c.font = 'italic 700 64px Georgia, serif';
+    // face sigil
+    c.font = 'italic 700 58px Georgia, serif';
     c.textBaseline = 'middle';
     c.fillStyle = rgba(accent, 0.95);
     c.shadowColor = accent;
     c.shadowBlur = 24;
-    c.fillText(this.def.glyph, PAD_X, PAD_TOP / 2 + 4);
+    c.fillText(this.def.glyph, PAD_X, 44);
     c.shadowBlur = 0;
 
-    c.font = '600 20px "Segoe UI", sans-serif';
-    c.fillStyle = 'rgba(220,235,255,0.4)';
-    c.fillText('L I N E S', PAD_X + 96, PAD_TOP / 2 + 22);
+    // box chrome for HOLD / NEXT
+    const boxes = [[PAD_X, 96, 104, 70], [CV_W - PAD_X - 300, 96, 300, 70]];
+    c.strokeStyle = 'rgba(255,255,255,0.10)';
+    c.lineWidth = 1;
+    for (const [x, y, w, h] of boxes) { c.beginPath(); c.roundRect(x, y, w, h, 8); c.stroke(); }
+    c.font = '600 11px "Segoe UI", sans-serif';
+    c.fillStyle = 'rgba(220,235,255,0.34)';
+    c.fillText('H O L D', PAD_X + 6, 88);
+    c.fillText('N E X T', CV_W - PAD_X - 294, 88);
     return cv;
   }
 
-  // fallFrac: 0..1 progress toward the next gravity row (sub-cell interpolation)
-  draw(now, fallFrac = 0, dtSec = 0.016) {
+  #mini(c, name, cx, cy, cell, alpha = 1, inert = false) {
+    const m = MINI[name];
+    if (!m) return;
+    const idx = 'IOTSZJL'.indexOf(name) + 1;
+    const spr = SPRITES[idx][inert ? 'inert' : 'auto'];
+    const scale = cell / CELL;
+    const ox = cx - (m.w * cell) / 2;
+    const oy = cy - (m.h * cell) / 2;
+    c.save();
+    c.globalAlpha = alpha;
+    for (const [bx, by] of m.cells) {
+      c.drawImage(spr, ox + bx * cell - GLOW * scale, oy + by * cell - GLOW * scale, spr.width * scale, spr.height * scale);
+    }
+    c.restore();
+  }
+
+  draw(now, fallFrac = 0, dtSec = 0.016, extra = {}) {
     const { ctx: c, board } = this;
     const { accent } = this.def;
+    const { eclipse = false, score = 0 } = extra;
     c.clearRect(0, 0, CV_W, CV_H);
     c.drawImage(this.bg, 0, 0);
 
     const wx = PAD_X, wy = PAD_TOP;
 
-    // live line count on the face itself
-    c.font = '700 58px Consolas, monospace';
+    /* ---- header: courses laid + score ---- */
+    c.font = '700 46px Consolas, monospace';
     c.textBaseline = 'middle';
+    c.textAlign = 'left';
     c.fillStyle = '#ffffff';
     c.shadowColor = accent;
     c.shadowBlur = 16;
-    c.fillText(String(board.lines), PAD_X + 96, PAD_TOP / 2 - 12);
+    c.fillText(String(board.lines), PAD_X + 84, 42);
     c.shadowBlur = 0;
+    c.font = '600 12px "Segoe UI", sans-serif';
+    c.fillStyle = 'rgba(220,235,255,0.38)';
+    c.fillText('C O U R S E S', PAD_X + 86, 68);
 
-    // NEXT preview, top-right
-    c.font = '600 18px "Segoe UI", sans-serif';
-    c.fillStyle = 'rgba(220,235,255,0.4)';
-    c.fillText('N E X T', CV_W - PAD_X - 150, PAD_TOP / 2 - 30);
-    if (board.nextName) {
-      const mini = 22, scale = mini / CELL;
-      const baseX = CV_W - PAD_X - 150, baseY = PAD_TOP / 2 - 14;
-      const cells = PREVIEW_CELLS[board.nextName];
-      const idx = 'IOTSZJL'.indexOf(board.nextName) + 1;
-      const spr = SPRITES[idx].auto;
-      for (const [cx, cy] of cells) {
-        c.drawImage(spr, baseX + cx * mini - GLOW * scale, baseY + cy * mini - GLOW * scale, spr.width * scale, spr.height * scale);
-      }
+    if (score > 0) {
+      c.textAlign = 'right';
+      c.font = '700 34px Consolas, monospace';
+      c.fillStyle = 'rgba(255,255,255,0.92)';
+      c.shadowColor = accent; c.shadowBlur = 12;
+      c.fillText(score.toLocaleString('en-US'), CV_W - PAD_X, 40);
+      c.shadowBlur = 0;
+      c.font = '600 11px "Segoe UI", sans-serif';
+      c.fillStyle = 'rgba(220,235,255,0.32)';
+      c.fillText('S C O R E', CV_W - PAD_X, 64);
+      c.textAlign = 'left';
     }
 
-    // settled stack
+    /* ---- hold ---- */
+    if (board.hold) this.#mini(c, board.hold, PAD_X + 52, 131, 20, board.holdUsed ? 0.35 : 1, board.holdUsed);
+
+    /* ---- next queue (5 deep, shrinking) ---- */
+    const prev = board.preview;
+    let nx = CV_W - PAD_X - 264;
+    prev.forEach((name, i) => {
+      const cell = i === 0 ? 19 : 14;
+      this.#mini(c, name, nx, 131, cell, i === 0 ? 1 : 0.55 - i * 0.07);
+      nx += i === 0 ? 66 : 50;
+    });
+
+    /* ---- settled stack ---- */
     for (let y = 0; y < ROWS; y++) {
-      const isClearing = board.clearing && board.clearing.rows.includes(y);
-      if (isClearing) continue;
+      if (board.clearing && board.clearing.rows.includes(y)) continue;
       const row = board.grid[y];
       for (let x = 0; x < COLS; x++) {
         const v = row[x];
@@ -178,7 +230,7 @@ export class FaceRenderer {
       }
     }
 
-    // clearing rows: white-hot flash sweeping out
+    /* ---- clearing rows ---- */
     if (board.clearing) {
       const t = Math.min(1, (now - board.clearing.t0) / CLEAR_FLASH_MS);
       for (const y of board.clearing.rows) {
@@ -193,23 +245,19 @@ export class FaceRenderer {
       }
     }
 
-    // ghost + falling piece (interpolated for smoothness)
+    /* ---- ghost + falling piece ---- */
     if (board.piece && !board.toppedOut) {
       const p = board.piece;
       const gy = board.ghostY();
-      const targetY = Math.min(p.y + Math.max(0, Math.min(1, fallFrac)), gy);
+      const targetY = Math.min(p.y + Math.max(0, Math.min(1, eclipse ? 0 : fallFrac)), gy);
       if (board.pieceSeq !== this.lastSeq) {
         this.lastSeq = board.pieceSeq;
-        this.visX = p.x;
-        this.visY = targetY;
+        this.visX = p.x; this.visY = targetY;
       }
       this.visX += (p.x - this.visX) * Math.min(1, dtSec * 26);
       if (Math.abs(p.x - this.visX) < 0.02) this.visX = p.x;
-
-      // vertical: chase the logical position so soft drop GLIDES instead of
-      // stepping a whole cell every repeat tick
       this.visY += (targetY - this.visY) * Math.min(1, dtSec * 24);
-      if (targetY - this.visY > 0.9) this.visY = targetY - 0.9; // cap the lag
+      if (targetY - this.visY > 0.9) this.visY = targetY - 0.9;
       if (Math.abs(targetY - this.visY) < 0.01) this.visY = targetY;
       this.visY = Math.min(this.visY, gy);
 
@@ -222,27 +270,68 @@ export class FaceRenderer {
       c.clip();
 
       if (board.controlled && gy > p.y) {
+        c.setLineDash([6, 5]);
+        c.strokeStyle = rgba(PIECE_COLORS[p.color], 0.5);
+        c.lineWidth = 2;
         for (const [cx, cy] of board.cells({ ...p, y: gy })) {
           if (cy < 0) continue;
           c.beginPath();
           c.roundRect(wx + cx * CELL + 2, wy + cy * CELL + 2, CELL - 4, CELL - 4, 7);
-          c.strokeStyle = rgba(PIECE_COLORS[p.color], 0.5);
-          c.lineWidth = 2;
-          c.setLineDash([6, 5]);
           c.stroke();
-          c.setLineDash([]);
         }
+        c.setLineDash([]);
       }
 
+      // lock-delay tell: the piece brightens and pulses as its time runs out
+      const lockP = board.landed ? Math.min(1, board.lockTimer / LOCK_DELAY) : 0;
       const spr = board.controlled ? 'live' : 'auto';
       for (const [cx, cy] of board.cells()) {
         if (cy * CELL + dy < -CELL) continue;
         c.drawImage(SPRITES[p.color][spr], wx + cx * CELL + dx - GLOW, wy + cy * CELL + dy - GLOW);
       }
+      if (lockP > 0.15) {
+        c.save();
+        c.globalAlpha = (lockP - 0.15) * 0.75 * (0.6 + 0.4 * Math.sin(now / 45));
+        c.globalCompositeOperation = 'lighter';
+        c.fillStyle = '#ffffff';
+        for (const [cx, cy] of board.cells()) {
+          if (cy < 0) continue;
+          c.beginPath();
+          c.roundRect(wx + cx * CELL + dx + 2, wy + cy * CELL + dy + 2, CELL - 4, CELL - 4, 7);
+          c.fill();
+        }
+        c.restore();
+      }
       c.restore();
     }
 
-    // danger tint when the stack runs high
+    /* ---- ECLIPSE overlay on the face ---- */
+    if (eclipse) {
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      const pulse = 0.05 + 0.03 * Math.sin(now / 240);
+      c.fillStyle = `rgba(120,180,255,${pulse})`;
+      c.fillRect(wx, wy, COLS * CELL, ROWS * CELL);
+      c.restore();
+      // banked courses stack as thin bars beneath the well
+      const banked = board.banked;
+      if (banked > 0) {
+        const barH = 5, gap = 2;
+        const maxBars = Math.floor((PAD_BOT - 14) / (barH + gap));
+        for (let i = 0; i < Math.min(banked, maxBars * 3); i++) {
+          const col = Math.floor(i / maxBars);
+          const row = i % maxBars;
+          const by = CV_H - PAD_BOT + 8 + row * (barH + gap);
+          const bw = (COLS * CELL) / 3 - 8;
+          c.fillStyle = `rgba(180,230,255,${0.85 - col * 0.2})`;
+          c.shadowColor = '#9fe8ff'; c.shadowBlur = 10;
+          c.fillRect(wx + col * (bw + 8), by, bw, barH);
+          c.shadowBlur = 0;
+        }
+      }
+    }
+
+    /* ---- danger tint ---- */
     const h = board.stackHeight();
     if (h >= 13 && !board.toppedOut) {
       const a = Math.min(0.4, (h - 12) * 0.06) * (0.7 + 0.3 * Math.sin(now / 160));
@@ -250,7 +339,7 @@ export class FaceRenderer {
       c.fillRect(wx, wy, COLS * CELL, 5 * CELL);
     }
 
-    // topped-out shroud
+    /* ---- overrun ---- */
     if (board.toppedOut) {
       c.fillStyle = 'rgba(120,0,10,0.55)';
       c.fillRect(wx, wy, COLS * CELL, ROWS * CELL);
@@ -267,14 +356,3 @@ export class FaceRenderer {
     board.dirty = false;
   }
 }
-
-// tiny preview shapes (normalized, unit cells)
-const PREVIEW_CELLS = {
-  I: [[0, 0.5], [1, 0.5], [2, 0.5], [3, 0.5]],
-  O: [[1, 0], [2, 0], [1, 1], [2, 1]],
-  T: [[1, 0], [0, 1], [1, 1], [2, 1]],
-  S: [[1, 0], [2, 0], [0, 1], [1, 1]],
-  Z: [[0, 0], [1, 0], [1, 1], [2, 1]],
-  J: [[0, 0], [0, 1], [1, 1], [2, 1]],
-  L: [[2, 0], [0, 1], [1, 1], [2, 1]],
-};
