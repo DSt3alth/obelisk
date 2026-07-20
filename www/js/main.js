@@ -61,6 +61,8 @@ let lastTime = performance.now();
 let titleDemoAcc = 0;
 let pendingResult = null; // solo result awaiting name entry
 let padPrev = {};
+let fpsAcc = 0, fpsFrames = 0;
+const fpsEl = $('fps-meter'), fpsNumEl = $('fps-num');
 
 function gravityMs() { return Math.max(95, BASE_GRAVITY * Math.pow(0.86, level - 1)); }
 function fmtTime(ms) {
@@ -102,6 +104,8 @@ class Player {
     this.totalLines = 0;
     this.alive = true;
     this.lastWarnPing = 0;
+    this.hiddenDrawAt = [0, 0, 0, 0]; // last 2D redraw of each off-camera face
+    this.lastMonDraw = 0;
   }
 
   reset() {
@@ -461,6 +465,7 @@ window.addEventListener('keydown', e => {
       return;
     case 'p': case 'P': togglePause(); return;
     case 'm': case 'M': audio.toggleMute(); return;
+    case 'F3': e.preventDefault(); fpsEl.classList.toggle('hidden'); return;
     case 'F11': {
       e.preventDefault();
       const win = window.__TAURI__?.window?.getCurrentWindow?.();
@@ -654,7 +659,9 @@ function frame(now) {
     if (state === 'playing') {
       players.forEach(p => processHeld(p, dtMs));
       resolveClears(now);
-      players.forEach(p => p.drawMonitors(now));
+      players.forEach(p => {
+        if (now - p.lastMonDraw > 33) { p.lastMonDraw = now; p.drawMonitors(now); }
+      });
       const t = fmtTime(elapsed);
       timerEl.innerHTML = `${t.slice(0, 5)}<span class="tenths">${t.slice(5)}</span>`;
     }
@@ -662,14 +669,33 @@ function frame(now) {
     titleDemo(now, dtMs);
   }
 
-  // draw everything, every frame — the falling pieces are interpolated
+  // Draw at full display rate. Only faces the camera can see are uploaded to
+  // the GPU each frame; off-camera faces redraw at 20Hz purely to keep the
+  // mini-monitors fresh (no texture upload).
   const frac = state === 'playing' || state === 'dying' ? Math.min(1, gravityAcc / gravityMs()) : 0;
   for (const p of players) {
+    const vis = p.stage.visibleFaces();
     p.boards.forEach((b, i) => {
-      p.renderers[i].draw(now, frac, dt);
-      p.stage.markFaceDirty(i);
+      if (vis.has(i)) {
+        p.renderers[i].draw(now, frac, dt);
+        p.stage.markFaceDirty(i);
+      } else if (now - p.hiddenDrawAt[i] > 50) {
+        p.hiddenDrawAt[i] = now;
+        p.renderers[i].draw(now, frac, dt);
+      }
     });
     p.stage.update(dt, now);
+  }
+
+  // fps meter
+  fpsAcc += dtMs; fpsFrames++;
+  if (fpsAcc >= 500) {
+    const fps = Math.round(1000 * fpsFrames / fpsAcc);
+    fpsNumEl.textContent = fps;
+    fpsEl.classList.toggle('good', fps >= 110);
+    fpsEl.classList.toggle('mid', fps >= 58 && fps < 110);
+    fpsEl.classList.toggle('bad', fps < 58);
+    fpsAcc = 0; fpsFrames = 0;
   }
 }
 

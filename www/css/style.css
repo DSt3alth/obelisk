@@ -145,6 +145,24 @@ body.duel .monitors { transform: translateX(-50%) scale(0.8); transform-origin: 
   font-size: 15px; text-shadow: 0 0 8px currentColor;
 }
 
+/* ---------- fps meter ---------- */
+#fps-meter {
+  position: fixed; top: 14px; right: 18px; z-index: 40;
+  font-family: Consolas, monospace; font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.12em;
+  color: rgba(232,246,255,0.45);
+  background: rgba(8, 12, 22, 0.5);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  padding: 4px 10px;
+  pointer-events: none;
+}
+#fps-meter #fps-num { font-size: 16px; }
+#fps-meter.good #fps-num { color: #34d399; text-shadow: 0 0 8px rgba(52,211,153,0.6); }
+#fps-meter.mid #fps-num { color: #fbbf24; text-shadow: 0 0 8px rgba(251,191,36,0.6); }
+#fps-meter.bad #fps-num { color: #ff5d7e; text-shadow: 0 0 8px rgba(255,93,126,0.6); }
+#fps-meter .fps-hint { font-size: 10px; color: rgba(232,246,255,0.25); letter-spacing: 0.08em; }
+
 /* ---------- hints ---------- */
 #controls-hint {
   position: absolute; bottom: 14px; right: 20px;

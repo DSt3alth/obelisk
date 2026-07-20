@@ -135,10 +135,11 @@ export class Stage {
   }
 
   #buildFloor() {
+    // 1024 is plenty for a dark blurry mirror — halves the reflection pass cost
     const mirror = new Reflector(new THREE.CircleGeometry(30, 64), {
       clipBias: 0.003,
-      textureWidth: 2048,
-      textureHeight: 2048,
+      textureWidth: 1024,
+      textureHeight: 1024,
       color: 0x1c2434,
     });
     mirror.rotation.x = -Math.PI / 2;
@@ -310,6 +311,16 @@ export class Stage {
   kick(strength = 0.5) { this.shake = Math.min(1.2, this.shake + strength); }
 
   markFaceDirty(k) { this.textures[k].needsUpdate = true; }
+
+  // Which faces can the camera currently see? (front face, plus the incoming
+  // side mid-spin). Hidden faces skip their GPU texture upload entirely.
+  visibleFaces() {
+    const set = new Set();
+    for (let k = 0; k < 4; k++) {
+      if (Math.cos(this.rotY - k * Math.PI / 2) > 0.04) set.add(k);
+    }
+    return set;
+  }
 
   get spinning() { return this.spinT < 1; }
 
