@@ -63,6 +63,7 @@
     <div class="hud-label">AT THE POST</div>
     <div id="timer">00:00<span class="tenths">.0</span></div>
   </div>
+  <div id="reckoning-clock-wrap"><canvas id="reckoning-clock" width="260" height="260"></canvas></div>
   <div id="controls-hint"></div>
 </div>
 
@@ -110,11 +111,30 @@
         <div class="mode-name">DUEL</div>
         <div class="mode-desc">Two Keepers, two obelisks. Your courses turn your rival's stone. Last one standing.</div>
       </div>
+      <div class="mode-card" data-mode="coop">
+        <div class="mode-name">TWIN VIGIL</div>
+        <div class="mode-desc">Two Keepers, one obelisk. This has never been permitted before. All four faces, one fate.</div>
+      </div>
+      <div class="mode-card" data-mode="reckoning">
+        <div class="mode-name">THE RECKONING</div>
+        <div class="mode-desc">Three minutes. It counts louder every second. Outscore the dread before the buzzer.</div>
+      </div>
       <div class="mode-card" data-mode="daily">
         <div class="mode-name">THE SEAL</div>
         <div class="mode-desc">One sealed sequence, the same for every Keeper today. Three minutes. One attempt.</div>
         <div class="mode-badge" id="daily-badge"></div>
       </div>
+    </div>
+
+    <div id="diff-strip">
+      <div class="diff-label">DUTY LEVEL</div>
+      <div class="diff-pills">
+        <div class="diff-pill" data-diff="mercy">MERCY</div>
+        <div class="diff-pill" data-diff="duty">DUTY</div>
+        <div class="diff-pill" data-diff="count">THE COUNT</div>
+        <div class="diff-pill" data-diff="norelief">NO RELIEF</div>
+      </div>
+      <div class="diff-tagline" id="diff-tagline"></div>
     </div>
 
     <div id="title-cols">
@@ -125,7 +145,7 @@
     </div>
 
     <div class="press">
-      <b>ENTER</b> BEGIN &middot; <b>←→</b> MODE &middot; <b>C</b> THE RECORD &middot; <b>H</b> HANDLING &middot; 🎮
+      <b>ENTER</b> BEGIN &middot; <b>←→</b> MODE &middot; <b>[ ]</b> DUTY &middot; <b>C</b> RECORD &middot; <b>H</b> HANDLING &middot; 🎮
     </div>
   </div>
 </div>

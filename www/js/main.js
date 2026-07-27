@@ -6,6 +6,8 @@ import { audio } from './audio.js';
 import { scoreClear, scoreDrop, scoreEclipse, clearName, fmtScore } from './scoring.js';
 import * as P from './profile.js';
 import { FRAGMENTS, ACTS, pickWhisper, fragmentById } from './story.js';
+import { DIFFICULTIES, loadDifficulty, saveDifficulty } from './difficulty.js';
+import { createReckoningClock } from './reckoningclock.js';
 
 const FACES = [
   { glyph: 'I',   accent: '#22d3ee' },
@@ -30,23 +32,23 @@ function neighbours(face) {
 
 const CLEAR_FLASH_MS = 320;
 const BASE_GRAVITY = 820;
-const LEVEL_EVERY = 30_000;
+const THREE_MIN = 180_000;
 
 // One shared intensity language — nothing else may touch these slots.
 const HITSTOP = { lock: 0.03, 1: 0.04, 2: 0.06, 3: 0.08, 4: 0.12, tspin: 0.14, perfect: 0.20, death: 0.25, eclipse: 0.30 };
 const TRAUMA  = { lock: 0.05, 1: 0.15, 2: 0.22, 3: 0.30, 4: 0.45, tspin: 0.35, perfect: 0.80, death: 1.00, spin: 0.30 };
 
-const ECLIPSE_MAX = 12;   // courses to charge it fully
-const ECLIPSE_MIN = 3;    // minimum charge to invoke
-const DAILY_MS = 180_000; // the seal is three minutes
+const ECLIPSE_MIN = 3;    // minimum charge to invoke, regardless of difficulty
 
 const MODES = {
-  rite:      { title: 'RITE',      players: 1, spinDur: 0.72, ranked: true },
-  sovereign: { title: 'SOVEREIGN', players: 1, spinDur: 0.46, ranked: true },
-  duel:      { title: 'DUEL',      players: 2, spinDur: 0.62, ranked: false },
-  daily:     { title: 'THE SEAL',  players: 1, spinDur: 0.66, ranked: false, daily: true },
+  rite:      { title: 'RITE',         players: 1, spinDur: 0.72, ranked: true },
+  sovereign: { title: 'SOVEREIGN',    players: 1, spinDur: 0.46, ranked: true },
+  duel:      { title: 'DUEL',         players: 2, spinDur: 0.62, ranked: false, competitive: true },
+  coop:      { title: 'TWIN VIGIL',   players: 2, spinDur: 0.62, ranked: true,  competitive: false },
+  reckoning: { title: 'THE RECKONING', players: 1, spinDur: 0.72, ranked: true, durationMs: THREE_MIN },
+  daily:     { title: 'THE SEAL',     players: 1, spinDur: 0.66, ranked: false, daily: true, durationMs: THREE_MIN },
 };
-const MODE_ORDER = ['rite', 'sovereign', 'duel', 'daily'];
+const MODE_ORDER = ['rite', 'sovereign', 'duel', 'coop', 'reckoning', 'daily'];
 
 const SOLO_KEYS = {
   moveL: ['ArrowLeft', 'KeyA'], moveR: ['ArrowRight', 'KeyD'], soft: ['ArrowDown', 'KeyS'],
@@ -58,15 +60,24 @@ const DUEL_KEYS = [
   { moveL: ['KeyA'], moveR: ['KeyD'], soft: ['KeyS'], rotCW: ['KeyW'], rotCCW: ['KeyQ'], hard: ['Space'], hold: ['KeyE'], eclipse: ['KeyR'], spinL: [], spinR: [] },
   { moveL: ['ArrowLeft'], moveR: ['ArrowRight'], soft: ['ArrowDown'], rotCW: ['ArrowUp'], rotCCW: ['Slash'], hard: ['ShiftRight'], hold: ['Period'], eclipse: ['Comma'], spinL: [], spinR: [] },
 ];
+// Twin Vigil: same layout as Duel, plus free-spin keys — only live during a
+// shared ECLIPSE, when both Keepers may roam all four faces.
+const COOP_KEYS = [
+  { moveL: ['KeyA'], moveR: ['KeyD'], soft: ['KeyS'], rotCW: ['KeyW'], rotCCW: ['KeyQ'], hard: ['Space'], hold: ['KeyE'], eclipse: ['KeyR'], spinL: ['KeyZ'], spinR: ['KeyC'] },
+  { moveL: ['ArrowLeft'], moveR: ['ArrowRight'], soft: ['ArrowDown'], rotCW: ['ArrowUp'], rotCCW: ['Slash'], hard: ['ShiftRight'], hold: ['Period'], eclipse: ['Comma'], spinL: ['BracketLeft'], spinR: ['BracketRight'] },
+];
 
 const HINTS = {
   rite: '<span><b>←→</b> move</span><span><b>↑</b> rotate</span><span><b>Z</b> ccw</span><span><b>C</b> hold</span><span><b>SPACE</b> drop</span><span><b>R-SHIFT</b> eclipse</span><span><b>P</b> pause</span>',
   sovereign: '<span><b>Q</b>/<b>E</b> TURN THE STONE</span><span><b>←→</b> move</span><span><b>↑</b> rotate</span><span><b>C</b> hold</span><span><b>SPACE</b> drop</span><span><b>R-SHIFT</b> eclipse</span>',
   duel: '<span>P1 <b>A/D/S</b> · <b>W</b> rot · <b>E</b> hold · <b>SPACE</b> drop · <b>R</b> eclipse</span><span>P2 <b>←↓→</b> · <b>↑</b> rot · <b>.</b> hold · <b>R-SHIFT</b> drop · <b>,</b> eclipse</span>',
+  coop: '<span>FIRST WATCH <b>A/D/S</b> · <b>W</b> rot · <b>E</b> hold · <b>SPACE</b> drop · <b>R</b> eclipse</span><span>SECOND WATCH <b>←↓→</b> · <b>↑</b> rot · <b>.</b> hold · <b>R-SHIFT</b> drop · <b>,</b> eclipse</span><span>free-spin only inside a shared ECLIPSE</span>',
+  reckoning: '<span>THREE MINUTES · SCORE ATTACK</span><span><b>←→</b> move</span><span><b>↑</b> rotate</span><span><b>C</b> hold</span><span><b>SPACE</b> drop</span><span><b>R-SHIFT</b> eclipse</span>',
   daily: '<span>THREE MINUTES</span><span><b>←→</b> move</span><span><b>↑</b> rotate</span><span><b>C</b> hold</span><span><b>SPACE</b> drop</span><span><b>R-SHIFT</b> eclipse</span>',
 };
 
 const PLAYER_NAMES = ['KEEPER ONE', 'KEEPER TWO'];
+const COOP_NAMES = ['FIRST WATCH', 'SECOND WATCH'];
 const PLAYER_COLORS = ['#7ceeff', '#ff9ab8'];
 
 /* ---------------- handling ---------------- */
@@ -98,12 +109,17 @@ const eclOverlay = $('eclipse-overlay'), eclTimerFill = document.querySelector('
 const eclBankNum = $('ecl-bank-num');
 const payoutEl = $('payout');
 const fpsEl = $('fps-meter'), fpsNumEl = $('fps-num');
+const reckoningClock = createReckoningClock($('reckoning-clock'));
+const diffPills = [...document.querySelectorAll('.diff-pill')];
+const diffTaglineEl = $('diff-tagline');
 
 /* ---------------- state ---------------- */
 let state = 'title';
 let mode = 'rite';
 let menuIdx = 0;
+let difficultyIdx = loadDifficulty();
 let players = [];
+let paneKind = null; // 'solo' | 'duel' | 'coop' — tracks the LAST shape ensurePanes built
 let profile = P.load();
 let elapsed = 0, gravityAcc = 0, level = 1;
 let lastTime = performance.now();
@@ -115,8 +131,22 @@ let hitstop = 0;            // global sim freeze (seconds)
 let lastWhisperAt = 0;
 let runStats = null;
 let codexIdx = 0, handlingIdx = 0;
+let lastCountdownSec = null;    // THE RECKONING: last whole second we beeped
+let reckoningRiserFired = false;
 
-function gravityMs() { return Math.max(95, BASE_GRAVITY * Math.pow(0.86, level - 1)); }
+// Effective duty level for the CURRENT mode. The Seal is always DUTY-paced,
+// whatever the player has selected, so every Keeper's daily is comparable.
+function DIFF() { return mode === 'daily' ? DIFFICULTIES[1] : DIFFICULTIES[difficultyIdx]; }
+// Leaderboards are scoped per mode *and* duty level (except the fixed-pace Seal).
+function lbScopeFor(m) {
+  const d = m === 'daily' ? 'duty' : DIFFICULTIES[difficultyIdx].id;
+  return m + ':' + d;
+}
+
+function gravityMs() {
+  const d = DIFF();
+  return Math.max(95, BASE_GRAVITY * d.gravityMul * Math.pow(d.rampPow, level - 1));
+}
 function fmtTime(ms) {
   const t = Math.max(0, ms);
   const m = String(Math.floor(t / 60000)).padStart(2, '0');
@@ -137,8 +167,12 @@ function whisper(key, force = false) {
 }
 
 /* ---------------- player ---------------- */
+// opts.team / opts.boards / opts.renderers / opts.pair are how TWIN VIGIL
+// wires two Players into one shared obelisk — see ensurePanes(). Every
+// other mode leaves them unset and each Player is fully independent, exactly
+// as before.
 class Player {
-  constructor(idx, pane) {
+  constructor(idx, pane, opts = {}) {
     this.idx = idx;
     this.pane = pane;
     const q = s => pane.querySelector(s);
@@ -165,47 +199,71 @@ class Player {
       this.mon[role] = { el, canvas, cv: canvas.getContext('2d'), tag: el.querySelector('.mon-tag') };
     }
 
-    this.boards = FACES.map((_, i) => new Board(i));
-    this.renderers = this.boards.map((b, i) => new FaceRenderer(b, FACES[i]));
+    // TWIN VIGIL shares one obelisk between two Players: same 4 boards, same
+    // 4 face-canvases (a canvas can back more than one CanvasTexture), but
+    // each Player still gets its own camera (Stage) and own currentFace.
+    this.boards = opts.boards || FACES.map((_, i) => new Board(i));
+    this.renderers = opts.renderers || this.boards.map((b, i) => new FaceRenderer(b, FACES[i]));
     this.stage = new Stage(this.canvas, this.renderers.map(r => r.canvas), FACES);
+    this.team = opts.team || {
+      score: 0, totalLines: 0, charge: 0, eclipseOn: false, eclipseT: 0, eclipseDur: 0,
+      eclipseBank: 0, eclipsesUsed: 0, tetrises: 0, bestCombo: 0,
+    };
+    this.pair = opts.pair || null; // TWIN VIGIL: the two faces this Keeper answers for
 
     this.keymap = SOLO_KEYS;
     this.kb = {}; this.padHeld = {};
     this.hold = { left: { down: false, t: 0, rep: 0 }, right: { down: false, t: 0, rep: 0 }, soft: { down: false, acc: 0 } };
     this.currentFace = 0;
-    this.totalLines = 0;
-    this.score = 0;
     this.alive = true;
     this.lastWarnPing = 0;
     this.hiddenDrawAt = [0, 0, 0, 0];
     this.lastMonDraw = 0;
-    // eclipse
-    this.charge = 0;
-    this.eclipseOn = false;
-    this.eclipseT = 0;
-    this.eclipseDur = 0;
-    this.eclipseBank = 0;
-    this.eclipsesUsed = 0;
-    this.tetrises = 0;
-    this.bestCombo = 0;
+    this.eclipseMax = 12; // set from the duty level at run start
   }
 
+  // Score/lines/eclipse* all live on `team` — by default a private object
+  // (identical to a plain field), but shared between both TWIN VIGIL
+  // Players so a clear by either one updates both panes at once.
+  get score() { return this.team.score; } set score(v) { this.team.score = v; }
+  get totalLines() { return this.team.totalLines; } set totalLines(v) { this.team.totalLines = v; }
+  get charge() { return this.team.charge; } set charge(v) { this.team.charge = v; }
+  get eclipseOn() { return this.team.eclipseOn; } set eclipseOn(v) { this.team.eclipseOn = v; }
+  get eclipseT() { return this.team.eclipseT; } set eclipseT(v) { this.team.eclipseT = v; }
+  get eclipseDur() { return this.team.eclipseDur; } set eclipseDur(v) { this.team.eclipseDur = v; }
+  get eclipseBank() { return this.team.eclipseBank; } set eclipseBank(v) { this.team.eclipseBank = v; }
+  get eclipsesUsed() { return this.team.eclipsesUsed; } set eclipsesUsed(v) { this.team.eclipsesUsed = v; }
+  get tetrises() { return this.team.tetrises; } set tetrises(v) { this.team.tetrises = v; }
+  get bestCombo() { return this.team.bestCombo; } set bestCombo(v) { this.team.bestCombo = v; }
+
+  // Full reset for a Player that owns its boards outright (solo/duel).
   reset(rng) {
     this.boards.forEach(b => { if (rng) b.setRng(rng); b.reset(); });
-    this.currentFace = 0;
-    this.boards[0].controlled = true;
+    this._resetViewState();
+  }
+
+  // TWIN VIGIL: the shared boards are reset once, externally, by startRun();
+  // each camera only resets its own view/HUD state.
+  resetView() { this._resetViewState(); }
+
+  _resetViewState() {
+    this.currentFace = this.pair ? this.pair[0] : 0;
+    this.boards[this.currentFace].controlled = true;
     this.totalLines = 0; this.score = 0; this.alive = true;
     this.charge = 0; this.eclipseOn = false; this.eclipseBank = 0;
     this.eclipsesUsed = 0; this.tetrises = 0; this.bestCombo = 0;
     this.kb = {}; this.padHeld = {};
     this.hold = { left: { down: false, t: 0, rep: 0 }, right: { down: false, t: 0, rep: 0 }, soft: { down: false, acc: 0 } };
-    this.stage.rotY = 0; this.stage.spinT = 1;
+    // TWIN VIGIL's second Keeper starts on face II, not face I — the camera
+    // must match, not just the board-control flag.
+    this.stage.rotY = this.currentFace * Math.PI / 2;
+    this.stage.spinT = 1;
     this.stage.setEclipse(false);
     this.faceLinesEl.textContent = '0';
     this.totalLinesEl.textContent = '0';
     this.scoreEl.textContent = '0';
     this.levelEl.textContent = '1';
-    this.setAccent(0);
+    this.setAccent(this.currentFace);
     this.updateEclipseUI();
   }
 
@@ -278,21 +336,25 @@ class Player {
   addCharge(n) {
     if (this.eclipseOn) return;
     const before = this.armed;
-    this.charge = Math.min(ECLIPSE_MAX, this.charge + n);
+    this.charge = Math.min(this.eclipseMax, this.charge + n);
     this.updateEclipseUI();
     if (!before && this.armed) audio.combo(3);
   }
 
   updateEclipseUI() {
-    const f = this.charge / ECLIPSE_MAX;
+    const f = this.charge / this.eclipseMax;
     this.eclFill.style.right = `${(1 - f) * 100}%`;
     this.leftPanel.classList.toggle('armed', this.armed);
   }
 
+  // A shared eclipse (TWIN VIGIL) is dramatic enough to earn the same
+  // fullscreen takeover solo play gets — it is, after all, shared.
+  get soloSpectacle() { return players.length === 1 || mode === 'coop'; }
+
   startEclipse() {
     if (!this.armed || !this.alive) return false;
     this.eclipseOn = true;
-    this.eclipseDur = 3.5 + (this.charge / ECLIPSE_MAX) * 8.5;
+    this.eclipseDur = 3.5 + (this.charge / this.eclipseMax) * 8.5;
     this.eclipseT = this.eclipseDur;
     this.eclipseBank = 0;
     this.charge = 0;
@@ -302,7 +364,7 @@ class Player {
     this.stage.impact(0.55);
     this.stage.kick(0.5);
     this.updateEclipseUI();
-    if (players.length === 1) {
+    if (this.soloSpectacle) {
       eclOverlay.classList.remove('hidden');
       eclBankNum.textContent = '0';
       audio.eclipseStart();
@@ -320,7 +382,7 @@ class Player {
     this.eclipseOn = false;
     this.boards.forEach(b => { b.bankMode = false; });
     this.stage.setEclipse(false);
-    if (players.length === 1) { eclOverlay.classList.add('hidden'); audio.setEclipse(false); }
+    if (this.soloSpectacle) { eclOverlay.classList.add('hidden'); audio.setEclipse(false); }
 
     const banked = this.eclipseBank;
     if (banked > 0) {
@@ -332,7 +394,7 @@ class Player {
       this.stage.shockwave('#7cc4ff', 0.5 + weight, null, false);
       hitstop = Math.max(hitstop, 0.12 + weight * 0.12);
       audio.eclipseEnd(banked);
-      if (players.length === 1) showPayout(name, banked, points);
+      if (this.soloSpectacle) showPayout(name, banked, points);
       whisper('eclipseEnd', true);
     } else {
       audio.eclipseEnd(0);
@@ -343,7 +405,7 @@ class Player {
   tickEclipse(dt) {
     if (!this.eclipseOn) return;
     this.eclipseT -= dt;
-    if (players.length === 1) {
+    if (this.soloSpectacle) {
       eclTimerFill.style.transform = `scaleX(${Math.max(0, this.eclipseT / this.eclipseDur)})`;
       eclBankNum.textContent = this.eclipseBank;
     }
@@ -404,25 +466,47 @@ class Player {
 }
 
 /* ---------------- panes ---------------- */
-function ensurePanes(n) {
-  if (players.length === n) return;
+// kind: 'solo' (default for n=1) | 'duel' (default for n=2) | 'coop'.
+// duel and coop both use 2 panes but need DIFFERENT Player wiring (duel:
+// each Player owns its own 4 boards; coop: both share one set) — paneKind
+// lets us tell them apart even though the pane COUNT is identical, so
+// switching duel <-> coop always rebuilds rather than silently reusing the
+// wrong shape.
+function ensurePanes(n, kind = n === 2 ? 'duel' : 'solo') {
+  if (players.length === n && paneKind === kind) return;
   players.forEach(p => p.dispose());
   players = [];
   panesEl.innerHTML = '';
+
+  let sharedBoards = null, sharedRenderers = null, sharedTeam = null;
+  if (kind === 'coop') {
+    sharedBoards = FACES.map((_, i) => new Board(i));
+    sharedRenderers = sharedBoards.map((b, i) => new FaceRenderer(b, FACES[i]));
+    sharedTeam = {
+      score: 0, totalLines: 0, charge: 0, eclipseOn: false, eclipseT: 0, eclipseDur: 0,
+      eclipseBank: 0, eclipsesUsed: 0, tetrises: 0, bestCombo: 0,
+    };
+  }
+
   for (let i = 0; i < n; i++) {
     const pane = paneTpl.content.firstElementChild.cloneNode(true);
     panesEl.appendChild(pane);
-    const p = new Player(i, pane);
+    const opts = kind === 'coop'
+      ? { boards: sharedBoards, renderers: sharedRenderers, team: sharedTeam, pair: i === 0 ? [0, 2] : [1, 3] }
+      : {};
+    const p = new Player(i, pane, opts);
     if (n === 2) {
-      p.tagEl.textContent = PLAYER_NAMES[i];
+      const names = kind === 'coop' ? COOP_NAMES : PLAYER_NAMES;
+      p.tagEl.textContent = names[i];
       p.tagEl.style.color = PLAYER_COLORS[i];
       p.tagEl.style.textShadow = `0 0 14px ${PLAYER_COLORS[i]}`;
       p.tagEl.classList.remove('hidden');
-      p.keymap = DUEL_KEYS[i];
+      p.keymap = kind === 'coop' ? COOP_KEYS[i] : DUEL_KEYS[i];
     }
     players.push(p);
   }
   document.body.classList.toggle('duel', n === 2);
+  paneKind = kind;
   requestAnimationFrame(() => players.forEach(p => p.stage.resize()));
 }
 
@@ -473,6 +557,14 @@ function renderTitleLb() {
     lbListEl.innerHTML = '<div class="lb-empty">NO LEDGER — ONLY A SURVIVOR</div>';
     return;
   }
+  if (m === 'coop') {
+    lbTitleEl.textContent = `THE TWIN VIGIL — ${DIFFICULTIES[difficultyIdx].name}`;
+    const list = P.lbLoad(lbScopeFor(m)).slice(0, 6);
+    lbListEl.innerHTML = list.length
+      ? list.map((e, i) => lbRow(e, i)).join('')
+      : '<div class="lb-empty">NO WATCH HAS BEEN KEPT</div>';
+    return;
+  }
   if (m === 'daily') {
     const k = P.todayKey();
     const best = profile.dailyBest[k];
@@ -482,8 +574,8 @@ function renderTitleLb() {
       : '<div class="lb-empty">UNBROKEN. ONE ATTEMPT.</div>';
     return;
   }
-  lbTitleEl.textContent = `ETCHED IN STONE — ${MODES[m].title}`;
-  const list = P.lbLoad(m).slice(0, 6);
+  lbTitleEl.textContent = `ETCHED IN STONE — ${MODES[m].title} · ${DIFFICULTIES[difficultyIdx].name}`;
+  const list = P.lbLoad(lbScopeFor(m)).slice(0, 6);
   lbListEl.innerHTML = list.length
     ? list.map((e, i) => lbRow(e, i)).join('')
     : '<div class="lb-empty">NO KEEPER HAS HELD THIS POST</div>';
@@ -499,11 +591,25 @@ function renderDailyBadge() {
   else { badge.textContent = 'OPEN'; badge.className = 'mode-badge'; }
 }
 
+function renderDifficulty() {
+  diffPills.forEach((el, i) => el.classList.toggle('sel', i === difficultyIdx));
+  diffTaglineEl.textContent = DIFFICULTIES[difficultyIdx].tagline;
+}
+function setDifficulty(i) {
+  difficultyIdx = ((i % DIFFICULTIES.length) + DIFFICULTIES.length) % DIFFICULTIES.length;
+  saveDifficulty(difficultyIdx);
+  audio.ensure(); audio.move();
+  renderDifficulty();
+  renderTitleLb();
+}
+diffPills.forEach((el, i) => el.addEventListener('click', () => setDifficulty(i)));
+
 function renderMenu() {
   modeCards.forEach((el, i) => el.classList.toggle('sel', i === menuIdx));
   renderTitleLb();
   renderKeeperStrip();
   renderDailyBadge();
+  renderDifficulty();
 }
 function menuMove(d) {
   menuIdx = (menuIdx + d + MODE_ORDER.length) % MODE_ORDER.length;
@@ -594,22 +700,43 @@ function startRun() {
   const m = MODES[mode];
   if (m.daily && P.dailyDoneToday(profile) && !confirmPractice()) return;
   audio.ensure();
-  ensurePanes(m.players);
 
-  const rng = m.daily ? P.makeRng(P.dailySeed()) : Math.random;
-  players.forEach((p, i) => {
-    p.keymap = m.players === 2 ? DUEL_KEYS[i] : SOLO_KEYS;
-    p.reset(m.daily ? P.makeRng(P.dailySeed() + i * 7919) : null);
-    p.stage.idleMode = false;
-    p.stage.spinDur = m.spinDur;
-    p.pane.classList.remove('hud-off');
-  });
+  const kind = mode === 'coop' ? 'coop' : (m.players === 2 ? 'duel' : 'solo');
+  ensurePanes(m.players, kind);
+
+  const diff = DIFF();
+  if (kind === 'coop') {
+    // shared boards reset exactly once, regardless of pane reuse
+    players[0].boards.forEach(b => b.reset());
+    players.forEach(p => {
+      p.keymap = COOP_KEYS[p.idx];
+      p.eclipseMax = diff.eclipseMax;
+      p.boards.forEach(b => b.configure({ maxLockResets: diff.lockResets, blunderRate: diff.blunderRate }));
+      p.resetView();
+      p.stage.idleMode = false;
+      p.stage.spinDur = m.spinDur;
+      p.pane.classList.remove('hud-off');
+    });
+  } else {
+    const rng = m.daily ? P.makeRng(P.dailySeed()) : Math.random;
+    players.forEach((p, i) => {
+      p.keymap = m.players === 2 ? DUEL_KEYS[i] : SOLO_KEYS;
+      p.reset(m.daily ? P.makeRng(P.dailySeed() + i * 7919) : null);
+      p.eclipseMax = diff.eclipseMax;
+      p.boards.forEach(b => b.configure({ maxLockResets: diff.lockResets, blunderRate: diff.blunderRate }));
+      p.stage.idleMode = false;
+      p.stage.spinDur = m.spinDur;
+      p.pane.classList.remove('hud-off');
+    });
+  }
   applyHandling();
 
   elapsed = 0; gravityAcc = 0; level = 1; hitstop = 0;
   pendingResult = null;
+  lastCountdownSec = null; reckoningRiserFired = false;
   runStats = { eclipses: 0, tetrises: 0, bestCombo: 0 };
   hintEl.innerHTML = HINTS[mode];
+  document.body.classList.toggle('mode-reckoning', mode === 'reckoning');
 
   ['title-screen', 'gameover-screen', 'entry-screen', 'codex-screen', 'handling-screen'].forEach(id => $(id).classList.add('hidden'));
   hudGlobal.classList.remove('hidden');
@@ -630,6 +757,7 @@ function startRun() {
       cd.classList.add('hidden');
       state = 'playing';
       lastTime = performance.now();
+      audio.setTrack(mode === 'reckoning' ? 'reckoning' : 'main');
       audio.setIntensity(0);
       audio.startMusic();
     }
@@ -642,12 +770,13 @@ function toTitle() {
   state = 'title';
   audio.stopMusic();
   audio.setEclipse(false);
+  document.body.classList.remove('mode-reckoning');
   ['gameover-screen', 'entry-screen', 'pause-screen', 'countdown', 'codex-screen', 'handling-screen'].forEach(id => $(id).classList.add('hidden'));
   eclOverlay.classList.add('hidden');
   payoutEl.classList.add('hidden');
   hudGlobal.classList.add('hidden');
   $('title-screen').classList.remove('hidden');
-  ensurePanes(1);
+  ensurePanes(1, 'solo');
   players[0].boards.forEach(b => { b.controlled = false; b.reset(); b.controlled = false; });
   players[0].stage.idleMode = true;
   players[0].stage.setEclipse(false);
@@ -673,24 +802,48 @@ function togglePause() {
 }
 
 /* ---------------- end of run ---------------- */
+function endHeadline(result) {
+  if (result.reason === 'time') {
+    if (mode === 'reckoning') return { head: 'THE RECKONING IS PAID', cause: `THE COUNTDOWN REACHED ZERO — ${MODES[mode].title}` };
+    return { head: 'THE SEAL HOLDS', cause: `THREE MINUTES SERVED — ${MODES[mode].title}` };
+  }
+  if (mode === 'coop') return { head: 'THE VIGIL ENDS', cause: `FACE ${FACES[result.deadFace].glyph} WAS OVERRUN — BOTH POSTS ARE VACANT` };
+  return { head: 'THE POST IS VACANT', cause: `FACE ${FACES[result.deadFace].glyph} WAS OVERRUN — ${MODES[mode].title}` };
+}
+
 function endRun(loser, deadFace, reason = 'overrun') {
   if (state !== 'playing') return;
   state = 'dying';
   players.forEach(p => { if (p.eclipseOn) p.endEclipse(); });
-  audio.gameOver();
-  players.forEach(p => { p.stage.kick(TRAUMA.death); p.stage.impact(0.7); });
-  hitstop = HITSTOP.death;
-  whisper('gameOver', true);
+
+  // Outlasting THE RECKONING's countdown is a triumph, not a death — it
+  // gets the opposite audiovisual treatment from an overrun.
+  const survived = reason === 'time' && mode === 'reckoning';
+  if (survived) {
+    audio.reckoningComplete();
+    players.forEach(p => { p.stage.kick(0.55); p.stage.impact(0.6); p.stage.shockwave('#ffffff', 1.1, null, false); });
+    hitstop = 0.22;
+  } else {
+    audio.gameOver();
+    players.forEach(p => { p.stage.kick(TRAUMA.death); p.stage.impact(0.7); });
+    hitstop = HITSTOP.death;
+    whisper('gameOver', true);
+  }
 
   if (MODES[mode].players === 2) {
-    const winner = players[1 - loser.idx];
-    setTimeout(() => {
-      buildDuelGameover(winner, loser, deadFace);
-      $('gameover-screen').classList.remove('hidden');
-      audio.fanfare();
-      state = 'gameover';
-    }, 1000);
-    return;
+    if (MODES[mode].competitive) {
+      const winner = players[1 - loser.idx];
+      setTimeout(() => {
+        buildDuelGameover(winner, loser, deadFace);
+        $('gameover-screen').classList.remove('hidden');
+        audio.fanfare();
+        state = 'gameover';
+      }, 1000);
+      return;
+    }
+    // TWIN VIGIL (non-competitive): shared fate, falls through to the same
+    // ranked/solo pipeline below — players[0].score/totalLines already read
+    // the shared team values, so it "just works".
   }
 
   const p = players[0];
@@ -699,12 +852,14 @@ function endRun(loser, deadFace, reason = 'overrun') {
     eclipses: p.eclipsesUsed, tetrises: p.tetrises, bestCombo: p.bestCombo,
   };
 
+  if (mode === 'coop') profile.coopRuns = (profile.coopRuns || 0) + 1;
+
   // Every run pays: bank it immediately, before any UI.
   const { unlocked, rankUp } = P.commitRun(profile, result);
   if (MODES[mode].daily) P.markDailyDone(profile, result);
 
   setTimeout(() => {
-    if (MODES[mode].ranked && P.lbQualifies(mode, result.score)) {
+    if (MODES[mode].ranked && P.lbQualifies(lbScopeFor(mode), result.score)) {
       pendingResult = { result, unlocked, rankUp };
       $('entry-sub').textContent = `${MODES[mode].title} — ${fmtScore(result.score)} · ${result.lines} COURSES · ${fmtTime(result.ms)}`;
       nameInput.value = profile.name || '';
@@ -726,7 +881,7 @@ function submitEntry(skip = false) {
   if (!skip) { profile.name = name; P.save(profile); }
   const { result, unlocked, rankUp } = pendingResult;
   const entry = { name, ms: Math.floor(result.ms), lines: result.lines, score: result.score, date: Date.now() };
-  const rank = P.lbInsert(mode, entry);
+  const rank = P.lbInsert(lbScopeFor(mode), entry);
   $('entry-screen').classList.add('hidden');
   buildSoloGameover(result, rank, unlocked, rankUp);
   $('gameover-screen').classList.remove('hidden');
@@ -737,7 +892,7 @@ function submitEntry(skip = false) {
 
 function buildSoloGameover(result, rank, unlocked = [], rankUp = null) {
   const p = players[0];
-  const list = MODES[mode].ranked ? P.lbLoad(mode) : [];
+  const list = MODES[mode].ranked ? P.lbLoad(lbScopeFor(mode)) : [];
   const lbHtml = list.length
     ? `<ol class="go-lb" style="margin-top:24px">${list.map((e, i) =>
         lbRow(e, i, (i === rank ? 'you' : '') + (i === 0 ? ' top' : ''))).join('')}</ol>` : '';
@@ -746,13 +901,11 @@ function buildSoloGameover(result, rank, unlocked = [], rankUp = null) {
     ? `<div class="go-frag"><div class="fh">A PAGE RECOVERED — ${frag.title}</div><div class="ft">${frag.text}</div></div>`
     : '';
   const more = unlocked.length > 1 ? `<div class="best" style="margin-top:12px">+${unlocked.length - 1} MORE IN THE RECORD (C)</div>` : '';
-  const head = result.reason === 'time' ? 'THE SEAL HOLDS' : 'THE POST IS VACANT';
+  const { head, cause } = endHeadline(result);
 
   $('go-content').innerHTML = `
     <div class="go-head">${head}</div>
-    <div class="go-cause">${result.reason === 'time'
-      ? `THREE MINUTES SERVED — ${MODES[mode].title}`
-      : `FACE ${FACES[result.deadFace].glyph} WAS OVERRUN — ${MODES[mode].title}`}</div>
+    <div class="go-cause">${cause}</div>
     <div class="go-stats">
       <div class="go-stat"><div class="hud-label">SCORE</div><div class="go-num">${fmtScore(result.score)}</div></div>
       <div class="go-stat"><div class="hud-label">COURSES</div><div class="go-num">${result.lines}</div></div>
@@ -863,6 +1016,8 @@ window.addEventListener('keydown', e => {
   if (state === 'title') {
     if (['ArrowLeft', 'KeyA', 'ArrowUp'].includes(e.code)) menuMove(-1);
     else if (['ArrowRight', 'KeyD', 'ArrowDown'].includes(e.code)) menuMove(1);
+    else if (e.code === 'BracketLeft') setDifficulty(difficultyIdx - 1);
+    else if (e.code === 'BracketRight') setDifficulty(difficultyIdx + 1);
     else if (e.code === 'KeyC') openCodex();
     else if (e.code === 'KeyH') openHandling();
     return;
@@ -986,14 +1141,21 @@ function processHeld(p, dtMs) {
   } else s.down = false;
 }
 
+// TWIN VIGIL shares its 4 boards between two Players; without deduping,
+// a shared board would be stepped/ticked twice per frame (once per Player
+// iterating the same array) — silently doubling its gravity/lock speed.
+// Solo/duel never share boards, so this Set is a no-op there.
 function stepGravity(dtMs) {
   const g = gravityMs();
   while (gravityAcc >= g) {
     gravityAcc -= g;
+    const seen = new Set();
     for (const p of players) {
       if (!p.alive) continue;
       if (p.eclipseOn) continue;         // time is stopped for this Keeper
       for (const b of p.boards) {
+        if (seen.has(b)) continue;
+        seen.add(b);
         b.step();
         if (b.toppedOut) { endRun(p, b.face); return; }
       }
@@ -1002,9 +1164,12 @@ function stepGravity(dtMs) {
 }
 
 function tickLocks(dtMs) {
+  const seen = new Set();
   for (const p of players) {
     if (!p.alive) continue;
     for (const b of p.boards) {
+      if (seen.has(b)) continue;
+      seen.add(b);
       // during ECLIPSE the controlled board never auto-locks: the Keeper
       // places at their own pace. Unattended faces are frozen too.
       if (p.eclipseOn) continue;
@@ -1064,11 +1229,15 @@ function resolveClears(now) {
       audio.lineClear(n, combo);
       if (combo >= 1) audio.combo(combo + 1);
 
-      if (mode === 'rite') p.spinTo(p.randomOther());
-      else if (mode === 'duel') {
+      if (mode === 'rite' || mode === 'daily' || mode === 'reckoning') {
+        p.spinTo(p.randomOther());
+      } else if (mode === 'duel') {
         const foe = players[1 - p.idx];
         if (foe?.alive) foe.spinTo(foe.randomOther());
-      } else if (mode === 'daily') p.spinTo(p.randomOther());
+      } else if (mode === 'coop') {
+        p.spinTo(p.pair.find(f => f !== p.currentFace));
+      }
+      // sovereign: the turns are the player's own, no forced spin
     }
   }
 }
@@ -1102,19 +1271,38 @@ function frame(now) {
   if (hitstop > 0) { hitstop = Math.max(0, hitstop - dtReal); simMs = 0; }
   const dtSim = simMs / 1000;
 
+  const pulse = audio.beatPulse; // musical pulse drives bloom + aberration + clock ping
+
   if (state === 'playing') {
     elapsed += simMs;
-    if (MODES[mode].daily && elapsed >= DAILY_MS) {
+    const durationMs = MODES[mode].durationMs;
+    if (durationMs != null && elapsed >= durationMs && !players[0].eclipseOn) {
       endRun(players[0], players[0].currentFace, 'time');
     }
-    const newLevel = 1 + Math.floor(elapsed / LEVEL_EVERY);
+    const newLevel = 1 + Math.floor(elapsed / DIFF().levelEvery);
     if (newLevel !== level) {
       level = newLevel;
       players.forEach(p => { p.levelEl.textContent = level; pop(p.levelEl); });
       audio.levelUp();
-      audio.setIntensity((level - 1) / 8);
       whisper('levelUp');
       if (level === 5) whisper('longRun', true);
+    }
+    // continuous intensity: level-driven normally, countdown-driven in THE RECKONING
+    if (mode === 'reckoning' && durationMs) {
+      const frac = Math.max(0, Math.min(1, elapsed / durationMs));
+      audio.setIntensity(Math.pow(frac, 1.7));
+      const remainMs = durationMs - elapsed;
+      if (!reckoningRiserFired && remainMs <= 12000 && remainMs > 10500) {
+        reckoningRiserFired = true;
+        audio.reckoningRiser(11);
+      }
+      const remainSec = Math.ceil(Math.max(0, remainMs) / 1000);
+      if (remainMs <= 10500 && remainMs > 0 && remainSec !== lastCountdownSec) {
+        lastCountdownSec = remainSec;
+        audio.countdownBeep(remainSec);
+      }
+    } else {
+      audio.setIntensity((level - 1) / 8);
     }
     if (simMs > 0) {
       gravityAcc += simMs;
@@ -1125,21 +1313,23 @@ function frame(now) {
       tickLocks(simMs);
     }
     if (state === 'playing') {
-      players.forEach(p => p.tickEclipse(dtSim));
+      const tickedTeams = new Set();
+      players.forEach(p => { if (!tickedTeams.has(p.team)) { tickedTeams.add(p.team); p.tickEclipse(dtSim); } });
       resolveClears(now);
       players.forEach(p => {
         if (now - p.lastMonDraw > 33) { p.lastMonDraw = now; p.drawMonitors(now); }
       });
-      const remain = MODES[mode].daily ? Math.max(0, DAILY_MS - elapsed) : elapsed;
-      const t = fmtTime(remain);
-      timerEl.innerHTML = `${t.slice(0, 5)}<span class="tenths">${t.slice(5)}</span>`;
+      if (mode === 'reckoning' && durationMs) {
+        reckoningClock.draw({ remainMs: durationMs - elapsed, durationMs, beatPulse: pulse });
+      } else {
+        const remain = durationMs != null ? Math.max(0, durationMs - elapsed) : elapsed;
+        const t = fmtTime(remain);
+        timerEl.innerHTML = `${t.slice(0, 5)}<span class="tenths">${t.slice(5)}</span>`;
+      }
     }
   } else if (state === 'title' && players.length) {
     titleDemo(now, dtMs);
   }
-
-  // musical pulse drives bloom + aberration
-  const pulse = audio.beatPulse;
 
   const frac = state === 'playing' ? Math.min(1, gravityAcc / gravityMs()) : 0;
   for (const p of players) {
@@ -1170,7 +1360,7 @@ function frame(now) {
 }
 
 /* ---------------- boot ---------------- */
-ensurePanes(1);
+ensurePanes(1, 'solo');
 players[0].stage.idleMode = true;
 players[0].boards.forEach(b => { b.controlled = false; });
 players[0].pane.classList.add('hud-off');
@@ -1183,6 +1373,8 @@ window.QDBG = {
   mode: () => mode,
   players: () => players,
   profile: () => profile,
+  difficulty: () => DIFFICULTIES[difficultyIdx].id,
+  setDifficulty,
   get boards() { return players[0]?.boards; },
   get stage() { return players[0]?.stage; },
   face: (pi = 0) => players[pi]?.currentFace,
@@ -1195,6 +1387,7 @@ window.QDBG = {
   eclipse: (pi = 0) => players[pi].startEclipse(),
   endEclipse: (pi = 0) => players[pi].endEclipse(),
   kill: (pi = 0, f = 0) => { players[pi].boards[f].toppedOut = true; },
+  setElapsed: ms => { elapsed = ms; },
   tick: (dt = 0.016) => {
     const now = performance.now();
     for (const p of players) {

@@ -34,6 +34,16 @@ on the ladder:
 Invoke it early and bank little; hold out with the stack near the top and bank
 everything. It is both the panic valve and the biggest score in the game.
 
+## Duty levels
+
+Four tunings of the same engine, selectable at the title screen (`[` `]` or
+click): **MERCY**, **DUTY**, **THE COUNT**, **NO RELIEF** — each scales base
+speed, how hard the descent ramps, how often the unattended-face autopilot
+blunders, how many times a lock can be reset by moving, and how many courses
+ECLIPSE demands. Leaderboards are scoped per duty level, so a MERCY score
+never sits next to a NO RELIEF one. THE SEAL always plays at DUTY pace,
+whatever you've selected — every Keeper's daily has to be comparable.
+
 ## Modes
 
 | | |
@@ -41,11 +51,13 @@ everything. It is both the panic valve and the biggest score in the game.
 | **RITE** | The duty as written. Every course you seal turns the stone. |
 | **SOVEREIGN** | You command the turning yourself with `Q`/`E`. No forced turns, four faces to tend. |
 | **DUEL** | Split screen, two Keepers, two obelisks. *Your* courses turn your **rival's** stone. Last one standing. |
+| **TWIN VIGIL** | Split screen, two Keepers, **one shared obelisk**. First Watch answers for faces I & III, Second Watch for II & IV — between you, every face is always covered. Share the score, the course count, and one ECLIPSE meter; if either half is willing, both freeze together and may roam all four faces to bail the other out. If *any* face is overrun, both posts fall. The obelisk has never permitted two Keepers before. |
+| **THE RECKONING** | A three-minute score attack on its own driving track — same instruments, same scale, twice the urgency from the first bar. A flashy radial clock counts down center-screen, its ring and glow ramping from cool cyan through amber to hot red, thumping to the beat, as a clock-tick layer in the music itself subdivides faster the closer you get to zero. Outlast the buzzer and it's a triumph, not a death — the score resolves *up*. |
 | **THE SEAL** | A seeded daily. The same sequence for every Keeper, everywhere, for three minutes. |
 
 ## The Record of the Keepers
 
-Twenty fragments across four acts, unlocked by courses laid across every run
+Twenty-one fragments across four acts, unlocked by courses laid across every run
 and delivered on the death card — never as a wall of text, never blocking play.
 Press `C` at the title to read what you've recovered.
 
@@ -68,9 +80,9 @@ which is the point.
 | `P` · `M` · `F3` · `F11` | pause · mute · fps · fullscreen |
 | `C` · `H` *(at title)* | the Record · handling |
 
-Gamepads are supported — two of them, one per Keeper in DUEL. D-pad/stick to
-move, `A`/`B` rotate, `X` hold, `Y` hard drop, triggers for ECLIPSE, bumpers to
-turn the stone.
+Gamepads are supported — two of them, one per Keeper in DUEL or TWIN VIGIL.
+D-pad/stick to move, `A`/`B` rotate, `X` hold, `Y` hard drop, triggers for
+ECLIPSE, bumpers to turn the stone.
 
 **Handling** (`H` at the title) exposes DAS, ARR and soft-drop rate in
 milliseconds, plus ghost piece, grain and camera shake. Tune it before you

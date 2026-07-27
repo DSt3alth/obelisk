@@ -100,10 +100,20 @@ export class Board {
   constructor(faceIndex, rng = Math.random) {
     this.face = faceIndex;
     this.rng = rng;
+    // difficulty knobs — set once via configure(), survive across reset()
+    this.maxLockResets = MAX_LOCK_RESETS;
+    this.blunderRate = 0.13;
     this.reset();
   }
 
   setRng(rng) { this.rng = rng; }
+
+  // Applied by the difficulty selector. Left untouched by reset() so it
+  // persists for the lifetime of this Board object across runs.
+  configure({ maxLockResets, blunderRate } = {}) {
+    if (maxLockResets != null) this.maxLockResets = maxLockResets;
+    if (blunderRate != null) this.blunderRate = blunderRate;
+  }
 
   reset() {
     this.grid = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -214,7 +224,7 @@ export class Board {
   }
 
   #resetLock() {
-    if (this.landed && this.lockResets < MAX_LOCK_RESETS) {
+    if (this.landed && this.lockResets < this.maxLockResets) {
       this.lockTimer = 0;
       this.lockResets++;
     }
@@ -316,7 +326,7 @@ export class Board {
     if (!resting) { this.landed = false; this.lockTimer = 0; return null; }
     this.landed = true;
     this.lockTimer += dtMs;
-    if (this.lockTimer >= LOCK_DELAY || this.lockResets >= MAX_LOCK_RESETS && this.lockTimer >= LOCK_DELAY * 0.35) {
+    if (this.lockTimer >= LOCK_DELAY || this.lockResets >= this.maxLockResets && this.lockTimer >= LOCK_DELAY * 0.35) {
       return this.lock();
     }
     return null;
@@ -396,7 +406,7 @@ export class Board {
 
   /* ---------------- autopilot (unattended faces) ---------------- */
   #planAuto() {
-    if (this.rng() < 0.13) {
+    if (this.rng() < this.blunderRate) {
       return { rot: (this.rng() * 4) | 0, x: (this.rng() * (COLS - 2)) | 0 };
     }
     let best = null, bestScore = Infinity;

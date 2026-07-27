@@ -69,6 +69,13 @@ body.duel .pane + .pane { border-left: 1px solid rgba(255, 255, 255, 0.14); }
 }
 #timer .tenths { font-size: 30px; opacity: 0.65; }
 
+#reckoning-clock-wrap {
+  display: none;
+  position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+}
+body.mode-reckoning #timer-wrap { display: none; }
+body.mode-reckoning #reckoning-clock-wrap { display: block; }
+
 .side-panel {
   position: absolute; top: 50%; transform: translateY(-50%);
   text-align: center;
@@ -569,13 +576,41 @@ body.duel .monitors.compass { transform: translateX(-50%) scale(0.74); transform
 }
 .codex-list::-webkit-scrollbar-track, .codex-read::-webkit-scrollbar-track { background: transparent; }
 
-#mode-cards { flex-wrap: nowrap; gap: 12px; }
-.mode-card { position: relative; width: 176px; padding: 14px 14px 16px; }
-.mode-card .mode-name { font-size: 20px; }
-.mode-card .mode-desc { font-size: 11px; line-height: 1.55; margin-top: 6px; }
-@media (max-width: 900px) {
+#mode-cards { flex-wrap: nowrap; gap: 10px; }
+.mode-card { position: relative; width: 158px; padding: 12px 12px 14px; }
+.mode-card .mode-name { font-size: 17px; }
+.mode-card .mode-desc { font-size: 10.5px; line-height: 1.5; margin-top: 6px; }
+@media (max-width: 1080px) {
   #mode-cards { flex-wrap: wrap; }
   .mode-card { width: 168px; }
+}
+
+/* ============ duty level (difficulty) ============ */
+#diff-strip { margin-top: 20px; }
+.diff-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.42em;
+  color: rgba(232, 246, 255, 0.35);
+  margin-bottom: 9px;
+}
+.diff-pills { display: flex; gap: 8px; justify-content: center; }
+.diff-pill {
+  padding: 6px 15px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-edge);
+  color: rgba(232, 246, 255, 0.5);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.diff-pill:hover { color: rgba(232, 246, 255, 0.8); }
+.diff-pill.sel {
+  background: rgba(251, 191, 36, 0.14);
+  border-color: #fbbf24; color: #fbbf24;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.35);
+}
+.diff-tagline {
+  margin-top: 9px; font-size: 11px; font-style: italic;
+  color: rgba(232, 246, 255, 0.4); letter-spacing: 0.03em;
 }
 .mode-badge {
   position: absolute; top: -9px; right: -8px;

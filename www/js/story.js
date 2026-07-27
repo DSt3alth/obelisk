@@ -56,6 +56,9 @@ export const FRAGMENTS = [
   { id: 'ii5', act: 2, title: 'THE OTHER SIDE OF THE WALL', req: T(120), text:
     `In the ninth hour I put my ear to the stone.\n\nThere is no voice in it. I want to be clear about that.\nThere is no voice, no whisper, nothing that wants anything.\n\nThere is only a sound like a room being made ready.` },
 
+  { id: 'ii6', act: 2, title: 'THE SECOND KEEPER', req: p => (p.coopRuns || 0) >= 1, text:
+    `Today there were two of us at the post.\n\nThe instruction has always said "one Keeper." I looked for the line\nthat forbids a second and could not find it — only the line that\nassumes it, the way a stair assumes you have one pair of legs.\n\nThe Obelisk did not seem to mind. It took twice the courses gladly.\n\nI do not know if this is mercy or appetite. I no longer expect\nthe difference to matter.` },
+
   /* ---------------- ACT III — THE COUNT ---------------- */
   { id: 'iii1', act: 3, title: 'THE LEDGER', req: L(700), text:
     `I found the ledger in the undercroft. Every Keeper, every course.\n\n  KEEPERS SEATED . . . . . . . . 1,000\n  KEEPERS RELIEVED . . . . . . . . . 0\n  COURSES LAID . . . . . 3,114,922\n\nNot "sealed". The ledger has never used that word.\nThe ledger has always said *laid*.` },

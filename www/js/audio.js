@@ -35,6 +35,7 @@ class AudioEngine {
     this.timer = null;
     this.beatAt = 0;      // audio-clock time of the last kick (visual sync)
     this.barAt = 0;
+    this.track = 'main';  // 'main' | 'reckoning' — which step sequencer plays
   }
 
   /* ================= graph ================= */
@@ -286,9 +287,17 @@ class AudioEngine {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
   }
 
+  // Which step sequencer plays. 'reckoning' is a driving sibling track —
+  // same palette and scale, faster and more insistent from note one.
+  setTrack(id) {
+    this.track = id;
+    this.setIntensity(this.intensity);
+  }
+
   setIntensity(x) {
     this.intensity = Math.max(0, Math.min(1, x));
-    this.tempo = 108 + this.intensity * 40;
+    const reck = this.track === 'reckoning';
+    this.tempo = (reck ? 132 : 108) + this.intensity * (reck ? 42 : 40);
     if (this.ctx) {
       this.setDelayTime(this.tempo);
       // the lead stem fades in only when things get hairy
@@ -317,8 +326,9 @@ class AudioEngine {
   #schedule() {
     if (!this.musicOn) return;
     const spb = 60 / this.tempo / 2; // 8th notes
+    const step = this.track === 'reckoning' ? this.#playStepReckoning : this.#playStep;
     while (this.nextNoteTime < this.ctx.currentTime + 0.22) {
-      this.#playStep(this.step, this.nextNoteTime, spb);
+      step.call(this, this.step, this.nextNoteTime, spb);
       this.nextNoteTime += spb;
       this.step = (this.step + 1) % 64;
     }
@@ -387,6 +397,61 @@ class AudioEngine {
         voices: 2, detune: 7, cutoff: 1500, cutEnv: 900, q: 4,
         dest: this.stem.lead, attack: spb * 2, release: spb * 14,
         send: 1.0, delay: 0.4, pan: -0.2,
+      });
+    }
+  }
+
+  // THE RECKONING's track: same palette and scale as the main score, but
+  // driving from the first bar — no gated intro. A "clock" pluck subdivides
+  // faster as intensity climbs (a literal accelerating tick), the bass is a
+  // relentless eighth-note pulse instead of a slow walk, and a tense high
+  // pedal enters only once things are dire.
+  #playStepReckoning(s, t, spb) {
+    const bar = (s / 8) | 0;
+    const I = this.intensity;
+
+    /* ---- drums: four-on-the-floor from note one ---- */
+    if (s % 4 === 0) this.#kick(t, I > 0.55);
+    this.#hat(t, s % 4 === 2);
+    if (I > 0.4 && s % 2 === 1) this.#hat(t, false);
+    if (I > 0.7 && s % 8 === 6) this.#snare(t, 0.22);
+
+    /* ---- the clock: a bright pluck that subdivides faster with dread ---- */
+    const tickMod = I < 0.3 ? 4 : I < 0.6 ? 2 : 1;
+    if (s % tickMod === 0) {
+      this.#voice(t, {
+        freq: 1700 + I * 1600, dur: 0.05, type: 'square', gain: 0.045 + I * 0.05,
+        cutoff: 4200, q: 6, release: 0.06, pan: (s % 8 < 4) ? -0.3 : 0.3,
+      });
+    }
+
+    /* ---- bass: an insistent eighth-note pulse, not a slow walk ---- */
+    if (s % 2 === 0) {
+      const f = BASS_ROOTS[bar % 8];
+      this.#voice(t, {
+        freq: f, dur: spb * 1.8, type: 'sawtooth', gain: 0.13,
+        voices: 2, detune: 9, cutoff: 260 + I * 520, cutEnv: 700, q: 8,
+        dest: this.stem.bass, release: spb * 1.9,
+      });
+    }
+
+    /* ---- arp: same contour, brighter register, denser with intensity ---- */
+    const arpDiv = I < 0.4 ? 2 : 1;
+    if (s % arpDiv === 0) {
+      const f = ARP[s % 8] * 1.5;
+      this.#voice(t, {
+        freq: f, dur: spb * 0.9, type: 'sawtooth', gain: 0.05 + I * 0.05,
+        voices: 2, detune: 10, cutoff: 1100 + I * 2200, cutEnv: 1800, q: 7,
+        dest: this.stem.arp, send: 0.3, delay: 0.35, pan: ((s % 4) - 1.5) * 0.2,
+      });
+    }
+
+    /* ---- lead: a tense high pedal, only in the final stretch ---- */
+    if (I > 0.55 && s % 8 === 0) {
+      this.#voice(t, {
+        freq: this.#scale(7, 1), dur: spb * 7, type: 'triangle', gain: 0.06 + (I - 0.55) * 0.14,
+        voices: 2, detune: 14, cutoff: 2200, cutEnv: 1200, q: 5,
+        dest: this.stem.lead, attack: spb, release: spb * 8, send: 0.6,
       });
     }
   }
@@ -517,6 +582,61 @@ class AudioEngine {
       this.#voice(t + dt, { freq: this.#scale(d, 0), dur: 0.7, type: 'triangle', gain: 0.14, voices: 3, detune: 10, cutoff: 3000, cutEnv: 2200, q: 4, send: 0.8, delay: 0.4, release: 0.9 });
     });
     this.#noise(t + 0.6, { dur: 1.0, gain: 0.1, freq: 3000, q: 0.5, freqEnd: 9000, send: 0.7 });
+  }
+
+  // A rising riser, timed to land right as the final stretch begins.
+  reckoningRiser(seconds = 10) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const n = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2;
+    f.frequency.setValueAtTime(300, t);
+    f.frequency.exponentialRampToValueAtTime(7000, t + seconds);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + seconds * 0.92);
+    g.gain.linearRampToValueAtTime(0, t + seconds);
+    src.connect(f).connect(g).connect(this.sfxBus);
+    const s2 = ctx.createGain(); s2.gain.value = 0.5; g.connect(s2).connect(this.reverbSend);
+    src.start(t); src.stop(t + seconds + 0.05);
+
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(440, t + seconds);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.1, t + seconds * 0.9);
+    og.gain.linearRampToValueAtTime(0, t + seconds);
+    o.connect(og).connect(this.sfxBus);
+    o.start(t); o.stop(t + seconds + 0.05);
+  }
+
+  // One beep per whole second in the final countdown; pitch climbs toward zero.
+  countdownBeep(secondsLeft) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const freq = 420 + (10 - Math.max(0, Math.min(10, secondsLeft))) * 42;
+    this.#voice(t, { freq, dur: 0.12, type: 'square', gain: 0.1, cutoff: 3200, q: 4, release: 0.15 });
+  }
+
+  // Triumphant: outlasted the countdown. Resolves UP — the opposite of gameOver.
+  reckoningComplete() {
+    if (!this.ctx) return;
+    this.stopMusic();
+    const t = this.ctx.currentTime;
+    [[0, 0], [4, 0.1], [7, 0.2], [12, 0.35], [16, 0.55]].forEach(([d, dt]) => {
+      this.#voice(t + dt, {
+        freq: this.#scale(d, 0), dur: 1.4, type: 'sawtooth', gain: 0.13,
+        voices: 3, detune: 12, cutoff: 2800, cutEnv: 2200, q: 5,
+        send: 0.9, delay: 0.4, release: 1.8,
+      });
+    });
+    this.#noise(t, { dur: 1.6, gain: 0.14, freq: 2000, q: 0.5, freqEnd: 9000, send: 0.8 });
+    this.#voice(t, { freq: 55, dur: 2.2, type: 'sine', gain: 0.3, cutoff: 500, release: 2.6, send: 0.6 });
   }
 
   gameOver() {

@@ -27,6 +27,7 @@ const BLANK = {
   eclipsesUsed: 0,
   tetrises: 0,
   bestCombo: 0,
+  coopRuns: 0,
   fragments: [],
   name: '',
   dailyDone: null,   // 'YYYY-MM-DD' of last completed daily
