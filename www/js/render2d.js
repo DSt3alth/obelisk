@@ -1,22 +1,28 @@
 // OBELISK — draws one Board onto its face canvas (used as a CanvasTexture).
-// Block sprites are pre-baked with their glow so every visible face can redraw
-// at display refresh; the falling piece is drawn at interpolated sub-cell
-// positions so motion is continuous.
+// Block sprites are pre-baked with layered crystal glass, internal refraction and
+// restrained bloom so every visible face can still redraw at display refresh.
 import { COLS, ROWS, PIECE_COLORS, LOCK_DELAY } from './tetris.js';
 
 export const CELL = 46;
 export const PAD_X = 42;
 export const PAD_TOP = 182;
 export const PAD_BOT = 62;
-export const CV_W = COLS * CELL + PAD_X * 2;          // 552
-export const CV_H = ROWS * CELL + PAD_TOP + PAD_BOT;  // 1164
+export const CV_W = COLS * CELL + PAD_X * 2;
+export const CV_H = ROWS * CELL + PAD_TOP + PAD_BOT;
 
 const CLEAR_FLASH_MS = 320;
-const GLOW = 18;
+const GLOW = 22;
 
 function rgba(hex, a) {
-  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${a})`;
+}
+
+function roundedRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.roundRect(x, y, w, h, r);
 }
 
 /* ---------------- sprite cache ---------------- */
@@ -24,29 +30,101 @@ let SPRITES = null;
 
 function mkSprite(colorIdx, glow, size = CELL) {
   const color = PIECE_COLORS[colorIdx];
-  const s = size - 4;
+  const s = size - 6;
   const cv = document.createElement('canvas');
   cv.width = cv.height = size + GLOW * 2;
   const c = cv.getContext('2d');
-  const x = GLOW + 2, y = GLOW + 2, r = Math.max(3, size * 0.15);
+  const x = GLOW + 3;
+  const y = GLOW + 3;
+  const r = Math.max(5, size * 0.16);
 
-  c.beginPath();
-  c.roundRect(x, y, s, s, r);
-  const g = c.createLinearGradient(x, y, x, y + s);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.18, color);
-  g.addColorStop(1, rgba(color, 0.55));
-  c.fillStyle = g;
+  // Wide aura: subtle for settled blocks, stronger for live pieces.
+  c.save();
   c.shadowColor = color;
-  c.shadowBlur = 14 * glow;
+  c.shadowBlur = 18 * glow;
+  c.fillStyle = rgba(color, 0.34);
+  roundedRect(c, x, y, s, s, r);
   c.fill();
-  c.shadowBlur = 0;
+  c.restore();
 
-  c.beginPath();
-  c.roundRect(x + 4, y + 4, s - 8, s - 8, Math.max(1, r - 3));
-  c.strokeStyle = 'rgba(255,255,255,0.28)';
-  c.lineWidth = 2;
+  // Dark translucent glass body.
+  const body = c.createLinearGradient(x, y, x + s, y + s);
+  body.addColorStop(0, 'rgba(255,255,255,0.72)');
+  body.addColorStop(0.10, rgba(color, 0.78));
+  body.addColorStop(0.42, rgba(color, 0.36));
+  body.addColorStop(0.72, rgba(color, 0.18));
+  body.addColorStop(1, rgba(color, 0.58));
+  c.fillStyle = body;
+  roundedRect(c, x, y, s, s, r);
+  c.fill();
+
+  // Internal depth tint.
+  const depth = c.createRadialGradient(
+    x + s * 0.34, y + s * 0.24, 1,
+    x + s * 0.52, y + s * 0.55, s * 0.72,
+  );
+  depth.addColorStop(0, 'rgba(255,255,255,0.48)');
+  depth.addColorStop(0.28, rgba(color, 0.14));
+  depth.addColorStop(1, 'rgba(0,0,0,0.36)');
+  c.fillStyle = depth;
+  roundedRect(c, x + 2, y + 2, s - 4, s - 4, Math.max(2, r - 2));
+  c.fill();
+
+  // Crystal bevel.
+  const edge = c.createLinearGradient(x, y, x + s, y + s);
+  edge.addColorStop(0, 'rgba(255,255,255,0.98)');
+  edge.addColorStop(0.28, rgba(color, 0.82));
+  edge.addColorStop(0.68, rgba(color, 0.44));
+  edge.addColorStop(1, 'rgba(255,255,255,0.78)');
+  c.strokeStyle = edge;
+  c.lineWidth = Math.max(2, size * 0.065);
+  roundedRect(c, x + 1, y + 1, s - 2, s - 2, r);
   c.stroke();
+
+  // Inset bevel.
+  c.strokeStyle = 'rgba(255,255,255,0.30)';
+  c.lineWidth = 1.4;
+  roundedRect(c, x + 5, y + 5, s - 10, s - 10, Math.max(2, r - 4));
+  c.stroke();
+
+  // Faceted diagonals give the blocks a cut-gem silhouette.
+  c.save();
+  c.strokeStyle = 'rgba(255,255,255,0.24)';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(x + 6, y + 6);
+  c.lineTo(x + s * 0.50, y + s * 0.50);
+  c.lineTo(x + s - 6, y + 6);
+  c.moveTo(x + 6, y + s - 6);
+  c.lineTo(x + s * 0.50, y + s * 0.50);
+  c.lineTo(x + s - 6, y + s - 6);
+  c.stroke();
+  c.restore();
+
+  // Top-left specular streak.
+  const shine = c.createLinearGradient(x + 5, y + 5, x + s * 0.76, y + s * 0.58);
+  shine.addColorStop(0, 'rgba(255,255,255,0.95)');
+  shine.addColorStop(0.16, 'rgba(255,255,255,0.46)');
+  shine.addColorStop(0.42, 'rgba(255,255,255,0.05)');
+  shine.addColorStop(1, 'rgba(255,255,255,0)');
+  c.strokeStyle = shine;
+  c.lineWidth = Math.max(2, size * 0.06);
+  c.beginPath();
+  c.moveTo(x + 8, y + s * 0.28);
+  c.quadraticCurveTo(x + s * 0.28, y + 4, x + s * 0.62, y + 7);
+  c.stroke();
+
+  // Small hot glint to sell polished glass.
+  c.save();
+  c.globalCompositeOperation = 'lighter';
+  c.fillStyle = 'rgba(255,255,255,0.92)';
+  c.shadowColor = '#ffffff';
+  c.shadowBlur = 7 + 8 * glow;
+  c.beginPath();
+  c.arc(x + s * 0.22, y + s * 0.18, Math.max(1.2, size * 0.035), 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+
   return cv;
 }
 
@@ -54,14 +132,17 @@ function buildSprites() {
   SPRITES = {};
   for (let i = 1; i <= 7; i++) {
     SPRITES[i] = {
-      stack: mkSprite(i, 0.55),
-      auto: mkSprite(i, 0.85),
-      live: mkSprite(i, 1.5),
-      inert: (() => {                       // greyed, for hold-locked
-        const cv = mkSprite(i, 0.2);
+      stack: mkSprite(i, 0.46),
+      auto: mkSprite(i, 0.72),
+      live: mkSprite(i, 1.25),
+      inert: (() => {
+        const cv = mkSprite(i, 0.16);
         const c = cv.getContext('2d');
         c.globalCompositeOperation = 'saturation';
         c.fillStyle = '#808080';
+        c.fillRect(0, 0, cv.width, cv.height);
+        c.globalCompositeOperation = 'source-over';
+        c.fillStyle = 'rgba(4,7,14,0.36)';
         c.fillRect(0, 0, cv.width, cv.height);
         return cv;
       })(),
@@ -69,7 +150,6 @@ function buildSprites() {
   }
 }
 
-// Mini shapes for hold/next boxes (normalized cells + width in cells)
 const MINI = {
   I: { cells: [[0, 1], [1, 1], [2, 1], [3, 1]], w: 4, h: 2 },
   O: { cells: [[1, 0], [2, 0], [1, 1], [2, 1]], w: 4, h: 2 },
@@ -93,65 +173,101 @@ export class FaceRenderer {
     this.visX = 0;
     this.visY = 0;
     this.lastSeq = -1;
-    this.flashLines = 0;     // decays after a clear, drives the well flash
+    this.flashLines = 0;
   }
 
   #makeBackground() {
     const cv = document.createElement('canvas');
-    cv.width = CV_W; cv.height = CV_H;
+    cv.width = CV_W;
+    cv.height = CV_H;
     const c = cv.getContext('2d');
     const { accent } = this.def;
 
     const g = c.createLinearGradient(0, 0, 0, CV_H);
-    g.addColorStop(0, '#0b0f1d');
-    g.addColorStop(0.5, '#05070f');
-    g.addColorStop(1, '#0a0d1a');
+    g.addColorStop(0, '#07111d');
+    g.addColorStop(0.48, '#03070f');
+    g.addColorStop(1, '#08111c');
     c.fillStyle = g;
     c.fillRect(0, 0, CV_W, CV_H);
 
-    const rg = c.createRadialGradient(CV_W / 2, CV_H * 0.45, 60, CV_W / 2, CV_H * 0.45, CV_H * 0.7);
-    rg.addColorStop(0, rgba(accent, 0.10));
+    const rg = c.createRadialGradient(CV_W / 2, CV_H * 0.44, 40, CV_W / 2, CV_H * 0.44, CV_H * 0.68);
+    rg.addColorStop(0, rgba(accent, 0.13));
+    rg.addColorStop(0.52, rgba(accent, 0.035));
     rg.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = rg;
     c.fillRect(0, 0, CV_W, CV_H);
 
-    const wx = PAD_X, wy = PAD_TOP, ww = COLS * CELL, wh = ROWS * CELL;
-    c.fillStyle = 'rgba(2,3,8,0.85)';
+    const wx = PAD_X;
+    const wy = PAD_TOP;
+    const ww = COLS * CELL;
+    const wh = ROWS * CELL;
+
+    const well = c.createLinearGradient(wx, wy, wx + ww, wy + wh);
+    well.addColorStop(0, 'rgba(3,9,18,0.98)');
+    well.addColorStop(0.55, 'rgba(1,3,8,0.99)');
+    well.addColorStop(1, rgba(accent, 0.055));
+    c.fillStyle = well;
     c.fillRect(wx, wy, ww, wh);
 
-    c.strokeStyle = 'rgba(150,180,255,0.055)';
+    // Faint glass-panel reflection within the playfield.
+    const reflection = c.createLinearGradient(wx, wy, wx + ww, wy + wh);
+    reflection.addColorStop(0, 'rgba(255,255,255,0.045)');
+    reflection.addColorStop(0.18, 'rgba(255,255,255,0.012)');
+    reflection.addColorStop(0.50, 'rgba(255,255,255,0)');
+    reflection.addColorStop(1, 'rgba(255,255,255,0.018)');
+    c.fillStyle = reflection;
+    c.fillRect(wx, wy, ww, wh);
+
+    c.strokeStyle = rgba(accent, 0.075);
     c.lineWidth = 1;
     c.beginPath();
-    for (let x = 1; x < COLS; x++) { c.moveTo(wx + x * CELL, wy); c.lineTo(wx + x * CELL, wy + wh); }
-    for (let y = 1; y < ROWS; y++) { c.moveTo(wx, wy + y * CELL); c.lineTo(wx + ww, wy + y * CELL); }
+    for (let x = 1; x < COLS; x++) {
+      c.moveTo(wx + x * CELL, wy);
+      c.lineTo(wx + x * CELL, wy + wh);
+    }
+    for (let y = 1; y < ROWS; y++) {
+      c.moveTo(wx, wy + y * CELL);
+      c.lineTo(wx + ww, wy + y * CELL);
+    }
     c.stroke();
 
-    c.strokeStyle = rgba(accent, 0.65);
+    // Layered frame: coloured energy edge plus bright crystal bevel.
+    c.strokeStyle = rgba(accent, 0.78);
     c.lineWidth = 3;
     c.shadowColor = accent;
-    c.shadowBlur = 18;
+    c.shadowBlur = 22;
     c.strokeRect(wx - 4, wy - 4, ww + 8, wh + 8);
     c.shadowBlur = 0;
-    c.strokeStyle = 'rgba(255,255,255,0.12)';
+    c.strokeStyle = 'rgba(225,245,255,0.22)';
     c.lineWidth = 1;
     c.strokeRect(wx - 8, wy - 8, ww + 16, wh + 16);
+    c.strokeStyle = rgba(accent, 0.24);
+    c.strokeRect(wx - 12, wy - 12, ww + 24, wh + 24);
 
-    // face sigil
     c.font = 'italic 700 58px Georgia, serif';
     c.textBaseline = 'middle';
-    c.fillStyle = rgba(accent, 0.95);
+    c.fillStyle = rgba(accent, 0.98);
     c.shadowColor = accent;
-    c.shadowBlur = 24;
+    c.shadowBlur = 26;
     c.fillText(this.def.glyph, PAD_X, 44);
     c.shadowBlur = 0;
 
-    // box chrome for HOLD / NEXT
     const boxes = [[PAD_X, 96, 104, 70], [CV_W - PAD_X - 300, 96, 300, 70]];
-    c.strokeStyle = 'rgba(255,255,255,0.10)';
-    c.lineWidth = 1;
-    for (const [x, y, w, h] of boxes) { c.beginPath(); c.roundRect(x, y, w, h, 8); c.stroke(); }
+    for (const [x, y, w, h] of boxes) {
+      c.fillStyle = 'rgba(4,10,20,0.42)';
+      roundedRect(c, x, y, w, h, 8);
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.12)';
+      c.lineWidth = 1;
+      roundedRect(c, x, y, w, h, 8);
+      c.stroke();
+      c.strokeStyle = rgba(accent, 0.14);
+      roundedRect(c, x + 3, y + 3, w - 6, h - 6, 6);
+      c.stroke();
+    }
+
     c.font = '600 11px "Segoe UI", sans-serif';
-    c.fillStyle = 'rgba(220,235,255,0.34)';
+    c.fillStyle = 'rgba(220,235,255,0.40)';
     c.fillText('H O L D', PAD_X + 6, 88);
     c.fillText('N E X T', CV_W - PAD_X - 294, 88);
     return cv;
@@ -180,9 +296,9 @@ export class FaceRenderer {
     c.clearRect(0, 0, CV_W, CV_H);
     c.drawImage(this.bg, 0, 0);
 
-    const wx = PAD_X, wy = PAD_TOP;
+    const wx = PAD_X;
+    const wy = PAD_TOP;
 
-    /* ---- header: courses laid + score ---- */
     c.font = '700 46px Consolas, monospace';
     c.textBaseline = 'middle';
     c.textAlign = 'left';
@@ -199,7 +315,8 @@ export class FaceRenderer {
       c.textAlign = 'right';
       c.font = '700 34px Consolas, monospace';
       c.fillStyle = 'rgba(255,255,255,0.92)';
-      c.shadowColor = accent; c.shadowBlur = 12;
+      c.shadowColor = accent;
+      c.shadowBlur = 12;
       c.fillText(score.toLocaleString('en-US'), CV_W - PAD_X, 40);
       c.shadowBlur = 0;
       c.font = '600 11px "Segoe UI", sans-serif';
@@ -208,10 +325,8 @@ export class FaceRenderer {
       c.textAlign = 'left';
     }
 
-    /* ---- hold ---- */
     if (board.hold) this.#mini(c, board.hold, PAD_X + 52, 131, 20, board.holdUsed ? 0.35 : 1, board.holdUsed);
 
-    /* ---- next queue (5 deep, shrinking) ---- */
     const prev = board.preview;
     let nx = CV_W - PAD_X - 264;
     prev.forEach((name, i) => {
@@ -220,7 +335,6 @@ export class FaceRenderer {
       nx += i === 0 ? 66 : 50;
     });
 
-    /* ---- settled stack ---- */
     for (let y = 0; y < ROWS; y++) {
       if (board.clearing && board.clearing.rows.includes(y)) continue;
       const row = board.grid[y];
@@ -230,7 +344,6 @@ export class FaceRenderer {
       }
     }
 
-    /* ---- clearing rows ---- */
     if (board.clearing) {
       const t = Math.min(1, (now - board.clearing.t0) / CLEAR_FLASH_MS);
       for (const y of board.clearing.rows) {
@@ -245,14 +358,14 @@ export class FaceRenderer {
       }
     }
 
-    /* ---- ghost + falling piece ---- */
     if (board.piece && !board.toppedOut) {
       const p = board.piece;
       const gy = board.ghostY();
       const targetY = Math.min(p.y + Math.max(0, Math.min(1, eclipse ? 0 : fallFrac)), gy);
       if (board.pieceSeq !== this.lastSeq) {
         this.lastSeq = board.pieceSeq;
-        this.visX = p.x; this.visY = targetY;
+        this.visX = p.x;
+        this.visY = targetY;
       }
       this.visX += (p.x - this.visX) * Math.min(1, dtSec * 26);
       if (Math.abs(p.x - this.visX) < 0.02) this.visX = p.x;
@@ -270,34 +383,37 @@ export class FaceRenderer {
       c.clip();
 
       if (board.controlled && gy > p.y) {
-        c.setLineDash([6, 5]);
-        c.strokeStyle = rgba(PIECE_COLORS[p.color], 0.5);
+        c.setLineDash([5, 5]);
+        c.strokeStyle = rgba(PIECE_COLORS[p.color], 0.62);
         c.lineWidth = 2;
+        c.shadowColor = PIECE_COLORS[p.color];
+        c.shadowBlur = 8;
         for (const [cx, cy] of board.cells({ ...p, y: gy })) {
           if (cy < 0) continue;
           c.beginPath();
-          c.roundRect(wx + cx * CELL + 2, wy + cy * CELL + 2, CELL - 4, CELL - 4, 7);
+          c.roundRect(wx + cx * CELL + 4, wy + cy * CELL + 4, CELL - 8, CELL - 8, 8);
           c.stroke();
         }
+        c.shadowBlur = 0;
         c.setLineDash([]);
       }
 
-      // lock-delay tell: the piece brightens and pulses as its time runs out
       const lockP = board.landed ? Math.min(1, board.lockTimer / LOCK_DELAY) : 0;
       const spr = board.controlled ? 'live' : 'auto';
       for (const [cx, cy] of board.cells()) {
         if (cy * CELL + dy < -CELL) continue;
         c.drawImage(SPRITES[p.color][spr], wx + cx * CELL + dx - GLOW, wy + cy * CELL + dy - GLOW);
       }
+
       if (lockP > 0.15) {
         c.save();
-        c.globalAlpha = (lockP - 0.15) * 0.75 * (0.6 + 0.4 * Math.sin(now / 45));
+        c.globalAlpha = (lockP - 0.15) * 0.62 * (0.6 + 0.4 * Math.sin(now / 45));
         c.globalCompositeOperation = 'lighter';
         c.fillStyle = '#ffffff';
         for (const [cx, cy] of board.cells()) {
           if (cy < 0) continue;
           c.beginPath();
-          c.roundRect(wx + cx * CELL + dx + 2, wy + cy * CELL + dy + 2, CELL - 4, CELL - 4, 7);
+          c.roundRect(wx + cx * CELL + dx + 5, wy + cy * CELL + dy + 5, CELL - 10, CELL - 10, 8);
           c.fill();
         }
         c.restore();
@@ -305,7 +421,6 @@ export class FaceRenderer {
       c.restore();
     }
 
-    /* ---- ECLIPSE overlay on the face ---- */
     if (eclipse) {
       c.save();
       c.globalCompositeOperation = 'lighter';
@@ -313,10 +428,11 @@ export class FaceRenderer {
       c.fillStyle = `rgba(120,180,255,${pulse})`;
       c.fillRect(wx, wy, COLS * CELL, ROWS * CELL);
       c.restore();
-      // banked courses stack as thin bars beneath the well
+
       const banked = board.banked;
       if (banked > 0) {
-        const barH = 5, gap = 2;
+        const barH = 5;
+        const gap = 2;
         const maxBars = Math.floor((PAD_BOT - 14) / (barH + gap));
         for (let i = 0; i < Math.min(banked, maxBars * 3); i++) {
           const col = Math.floor(i / maxBars);
@@ -324,14 +440,14 @@ export class FaceRenderer {
           const by = CV_H - PAD_BOT + 8 + row * (barH + gap);
           const bw = (COLS * CELL) / 3 - 8;
           c.fillStyle = `rgba(180,230,255,${0.85 - col * 0.2})`;
-          c.shadowColor = '#9fe8ff'; c.shadowBlur = 10;
+          c.shadowColor = '#9fe8ff';
+          c.shadowBlur = 10;
           c.fillRect(wx + col * (bw + 8), by, bw, barH);
           c.shadowBlur = 0;
         }
       }
     }
 
-    /* ---- danger tint ---- */
     const h = board.stackHeight();
     if (h >= 13 && !board.toppedOut) {
       const a = Math.min(0.4, (h - 12) * 0.06) * (0.7 + 0.3 * Math.sin(now / 160));
@@ -339,7 +455,6 @@ export class FaceRenderer {
       c.fillRect(wx, wy, COLS * CELL, 5 * CELL);
     }
 
-    /* ---- overrun ---- */
     if (board.toppedOut) {
       c.fillStyle = 'rgba(120,0,10,0.55)';
       c.fillRect(wx, wy, COLS * CELL, ROWS * CELL);

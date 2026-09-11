@@ -1,0 +1,660 @@
+/* OBELISK — crystal arena visual layer.
+   This file intentionally overrides the original HUD without changing gameplay. */
+
+:root {
+  --crystal-cyan: #62d9ff;
+  --crystal-amber: #ffad4d;
+  --crystal-white: #eafaff;
+  --glass-void: rgba(2, 6, 14, 0.76);
+  --glass-edge: rgba(224, 247, 255, 0.22);
+}
+
+html,
+body {
+  background: #010208;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+body::before {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(94, 202, 255, 0.15) 0 1px, transparent 2px),
+    radial-gradient(circle at 74% 12%, rgba(255, 186, 92, 0.13) 0 1px, transparent 2px),
+    radial-gradient(circle at 42% 66%, rgba(178, 128, 255, 0.11) 0 1px, transparent 2px),
+    radial-gradient(ellipse at 50% 32%, rgba(26, 55, 103, 0.16), transparent 48%),
+    linear-gradient(180deg, #02040b 0%, #010207 67%, #030711 100%);
+  background-size: 143px 143px, 197px 197px, 251px 251px, auto, auto;
+}
+
+body::after {
+  z-index: 1;
+  top: 68%;
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(78, 154, 218, 0.04) 36%, rgba(7, 20, 39, 0.44) 100%),
+    repeating-linear-gradient(90deg, transparent 0 82px, rgba(116, 207, 255, 0.045) 83px, transparent 84px),
+    repeating-linear-gradient(0deg, transparent 0 56px, rgba(116, 207, 255, 0.035) 57px, transparent 58px);
+  transform: perspective(620px) rotateX(61deg) scale(1.38);
+  transform-origin: center bottom;
+  mask-image: linear-gradient(to bottom, transparent, black 36%);
+}
+
+#panes {
+  z-index: 2;
+  padding: clamp(10px, 1.1vw, 22px);
+  gap: 0;
+}
+
+.pane {
+  --frame-accent: var(--accent);
+  isolation: isolate;
+  border-radius: 30px;
+  background:
+    radial-gradient(ellipse at 50% 32%, rgba(34, 90, 134, 0.10), transparent 52%),
+    rgba(1, 3, 9, 0.58);
+  box-shadow:
+    0 38px 90px rgba(0, 0, 0, 0.62),
+    inset 0 0 110px rgba(5, 14, 30, 0.58);
+}
+
+body:not(.duel) .pane {
+  max-width: min(90vw, 1540px);
+  margin-inline: auto;
+}
+
+body.duel #panes {
+  gap: clamp(58px, 7vw, 132px);
+}
+
+body.duel .pane:first-child {
+  --frame-accent: var(--crystal-cyan);
+}
+
+body.duel .pane:nth-child(2) {
+  --frame-accent: var(--crystal-amber);
+}
+
+.pane .gl {
+  z-index: 0;
+  filter: saturate(1.16) contrast(1.045) brightness(1.02);
+}
+
+.pane::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid rgba(232, 249, 255, 0.13);
+  border-radius: 24px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.82),
+    inset 0 0 32px color-mix(in srgb, var(--frame-accent) 13%, transparent),
+    0 0 38px color-mix(in srgb, var(--frame-accent) 17%, transparent);
+}
+
+.pane::after {
+  content: "";
+  position: absolute;
+  inset: 28px;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 18px;
+  background:
+    linear-gradient(114deg, rgba(255, 255, 255, 0.055), transparent 18% 74%, rgba(255, 255, 255, 0.025)),
+    linear-gradient(180deg, rgba(7, 18, 35, 0.12), transparent 28% 78%, rgba(4, 13, 29, 0.22));
+  mix-blend-mode: screen;
+}
+
+/* ---------- generated crystal chassis ---------- */
+.crystal-chassis {
+  position: absolute;
+  inset: 8px;
+  z-index: 4;
+  pointer-events: none;
+  filter: drop-shadow(0 0 12px var(--frame-accent));
+  animation: chassisBreath 3.8s ease-in-out infinite alternate;
+}
+
+@keyframes chassisBreath {
+  from { opacity: 0.82; filter: drop-shadow(0 0 7px var(--frame-accent)); }
+  to { opacity: 1; filter: drop-shadow(0 0 17px var(--frame-accent)); }
+}
+
+.crystal-rail {
+  position: absolute;
+  display: block;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent, rgba(255,255,255,0.94) 18%, var(--frame-accent) 48%, rgba(255,255,255,0.86) 78%, transparent);
+  box-shadow:
+    0 0 8px var(--frame-accent),
+    0 0 24px color-mix(in srgb, var(--frame-accent) 58%, transparent),
+    inset 0 0 5px rgba(255,255,255,0.72);
+}
+
+.crystal-rail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 8%, rgba(255,255,255,0.9), transparent 22% 72%, rgba(255,255,255,0.66), transparent 92%);
+  transform: translateX(-90%);
+  animation: railSweep 5.2s linear infinite;
+}
+
+@keyframes railSweep {
+  to { transform: translateX(100%); }
+}
+
+.rail-top,
+.rail-bottom {
+  left: 58px;
+  right: 58px;
+  height: 4px;
+}
+
+.rail-top { top: 15px; }
+.rail-bottom { bottom: 15px; }
+
+.rail-left,
+.rail-right {
+  top: 58px;
+  bottom: 58px;
+  width: 4px;
+  background:
+    linear-gradient(180deg, transparent, rgba(255,255,255,0.94) 18%, var(--frame-accent) 48%, rgba(255,255,255,0.86) 78%, transparent);
+}
+
+.rail-left { left: 15px; }
+.rail-right { right: 15px; }
+
+.crystal-corner {
+  position: absolute;
+  width: 78px;
+  height: 78px;
+  display: block;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,255,255,0.12) 24%, var(--frame-accent) 54%, rgba(0,0,0,0.12) 76%, rgba(255,255,255,0.72));
+  clip-path: polygon(0 0, 72% 0, 100% 28%, 72% 48%, 48% 100%, 24% 72%, 0 72%);
+  box-shadow: inset 0 0 18px rgba(255,255,255,0.38);
+}
+
+.crystal-corner::before,
+.crystal-corner::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.crystal-corner::before {
+  inset: 9px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.72), transparent 38%),
+    linear-gradient(315deg, rgba(0,0,0,0.38), transparent 44%);
+  clip-path: polygon(0 0, 72% 0, 100% 28%, 72% 48%, 48% 100%, 24% 72%, 0 72%);
+}
+
+.crystal-corner::after {
+  left: 17px;
+  top: 15px;
+  width: 42px;
+  height: 42px;
+  border-top: 1px solid rgba(255,255,255,0.72);
+  border-left: 1px solid rgba(255,255,255,0.48);
+  transform: rotate(45deg);
+  opacity: 0.72;
+}
+
+.corner-tl { top: 0; left: 0; }
+.corner-tr { top: 0; right: 0; transform: rotate(90deg); }
+.corner-br { right: 0; bottom: 0; transform: rotate(180deg); }
+.corner-bl { left: 0; bottom: 0; transform: rotate(270deg); }
+
+.crystal-scan {
+  position: absolute;
+  left: 25px;
+  right: 25px;
+  height: 1px;
+  top: 20%;
+  background: linear-gradient(90deg, transparent, var(--frame-accent), rgba(255,255,255,0.92), var(--frame-accent), transparent);
+  box-shadow: 0 0 14px var(--frame-accent);
+  opacity: 0;
+  animation: chassisScan 7.5s ease-in-out infinite;
+}
+
+@keyframes chassisScan {
+  0%, 8% { top: 17%; opacity: 0; }
+  18% { opacity: 0.62; }
+  72% { opacity: 0.34; }
+  86%, 100% { top: 86%; opacity: 0; }
+}
+
+.pane-crown {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 78px;
+  height: 58px;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  filter: drop-shadow(0 0 14px var(--frame-accent));
+}
+
+.crown-gem {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 46px;
+  height: 46px;
+  transform: translateX(-50%) rotate(45deg);
+  background:
+    radial-gradient(circle at 32% 26%, #ffffff 0 5%, transparent 8%),
+    linear-gradient(135deg, rgba(255,255,255,0.96), var(--frame-accent) 38%, rgba(5,18,40,0.84) 72%, rgba(255,255,255,0.62));
+  border: 1px solid rgba(255,255,255,0.58);
+  box-shadow: inset 0 0 15px rgba(255,255,255,0.30), 0 0 22px var(--frame-accent);
+}
+
+.crown-gem::before,
+.crown-gem::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(255,255,255,0.32);
+}
+
+.crown-gem::after {
+  inset: 13px;
+  background: rgba(255,255,255,0.18);
+  box-shadow: 0 0 18px #fff;
+}
+
+body.duel .pane-crown { display: none; }
+
+/* ---------- central duel crystal ---------- */
+#duel-spine {
+  display: none;
+  position: fixed;
+  top: 10px;
+  bottom: 18px;
+  left: 50%;
+  width: clamp(64px, 7vw, 118px);
+  transform: translateX(-50%);
+  z-index: 7;
+  pointer-events: none;
+}
+
+body.duel #duel-spine { display: block; }
+
+.duel-core {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: clamp(58px, 5vw, 88px);
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 20px #5dd8ff) drop-shadow(0 0 42px rgba(93,216,255,0.48));
+  animation: coreFloat 3.2s ease-in-out infinite alternate;
+}
+
+@keyframes coreFloat {
+  from { transform: translate(-50%, 0) scale(0.96); }
+  to { transform: translate(-50%, 5px) scale(1.04); }
+}
+
+.duel-core-main,
+.duel-core-main::before,
+.duel-core-main::after {
+  position: absolute;
+  content: "";
+}
+
+.duel-core-main {
+  inset: 18%;
+  transform: rotate(45deg);
+  background:
+    radial-gradient(circle at 34% 26%, #ffffff 0 4%, transparent 7%),
+    linear-gradient(135deg, #eaffff, #56cfff 35%, #124b91 72%, #dff8ff);
+  border: 1px solid rgba(255,255,255,0.82);
+  box-shadow: inset 0 0 18px rgba(255,255,255,0.42), 0 0 28px #5dd8ff;
+}
+
+.duel-core-main::before {
+  inset: 18%;
+  border: 1px solid rgba(255,255,255,0.44);
+  box-shadow: 0 0 12px rgba(255,255,255,0.62);
+}
+
+.duel-core-main::after {
+  inset: 38%;
+  background: #ffffff;
+  box-shadow: 0 0 20px #fff, 0 0 44px #63d8ff;
+}
+
+.duel-wing {
+  position: absolute;
+  top: 22%;
+  width: 30%;
+  height: 56%;
+  background: linear-gradient(135deg, rgba(255,255,255,0.94), #4fcaff 46%, rgba(8,44,92,0.66));
+  clip-path: polygon(50% 0, 100% 36%, 64% 100%, 0 72%, 30% 42%);
+  opacity: 0.86;
+}
+
+.duel-wing.left { left: 0; }
+.duel-wing.right { right: 0; transform: scaleX(-1); }
+
+.duel-spine-beam {
+  position: absolute;
+  top: clamp(84px, 7vw, 118px);
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(100,220,255,0.9), rgba(122,136,255,0.16) 42%, rgba(255,177,75,0.32) 84%, transparent);
+  box-shadow: 0 0 12px #6bdcff, 0 0 28px rgba(92,151,255,0.42);
+}
+
+.duel-score-stack {
+  position: absolute;
+  top: clamp(126px, 11vw, 190px);
+  left: 50%;
+  width: clamp(76px, 6vw, 102px);
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+}
+
+.duel-score-card {
+  padding: 8px 5px 9px;
+  text-align: center;
+  background: linear-gradient(145deg, rgba(10,22,40,0.86), rgba(2,5,13,0.90));
+  border: 1px solid rgba(225,248,255,0.18);
+  clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
+  box-shadow: inset 0 0 18px rgba(91,207,255,0.08), 0 0 24px rgba(0,0,0,0.62);
+}
+
+.duel-score-card.p1 { border-left-color: var(--crystal-cyan); }
+.duel-score-card.p2 { border-right-color: var(--crystal-amber); }
+.duel-score-card small {
+  display: block;
+  font-size: 7px;
+  letter-spacing: 0.24em;
+  color: rgba(228,246,255,0.48);
+}
+.duel-score-card b {
+  display: block;
+  margin-top: 3px;
+  font: 700 clamp(17px, 1.55vw, 25px)/1 Consolas, monospace;
+  color: #fff;
+  text-shadow: 0 0 12px currentColor;
+}
+.duel-score-card.p1 b { color: #aeeeff; }
+.duel-score-card.p2 b { color: #ffd39b; }
+
+/* ---------- HUD glasswork ---------- */
+#timer-wrap,
+.side-panel,
+.monitor,
+#fps-meter,
+#controls-hint {
+  background:
+    linear-gradient(145deg, rgba(15, 27, 47, 0.72), rgba(2, 5, 13, 0.82) 58%, rgba(9, 18, 34, 0.72));
+  border-color: rgba(225, 248, 255, 0.19);
+  box-shadow:
+    0 18px 42px rgba(0,0,0,0.48),
+    inset 0 1px 0 rgba(255,255,255,0.11),
+    inset 0 0 22px color-mix(in srgb, var(--accent) 7%, transparent);
+  backdrop-filter: blur(18px) saturate(1.25);
+}
+
+#timer-wrap {
+  top: 20px;
+  min-width: 210px;
+  padding: 12px 30px 13px;
+  border-radius: 0;
+  border: 1px solid rgba(225, 248, 255, 0.20);
+  clip-path: polygon(15px 0, calc(100% - 15px) 0, 100% 15px, 100% calc(100% - 11px), calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px), 0 15px);
+}
+
+body.duel #timer-wrap {
+  top: clamp(312px, 28vh, 410px);
+  min-width: 90px;
+  padding: 8px 9px 9px;
+  transform: translateX(-50%) scale(0.72);
+}
+
+#timer {
+  font-size: clamp(32px, 3.2vw, 52px);
+  text-shadow: 0 0 12px #fff, 0 0 30px var(--accent);
+}
+
+.side-panel {
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid rgba(225, 248, 255, 0.19);
+  clip-path: polygon(13px 0, calc(100% - 13px) 0, 100% 13px, 100% calc(100% - 13px), calc(100% - 13px) 100%, 13px 100%, 0 calc(100% - 13px), 0 13px);
+}
+
+.side-panel::before,
+.monitor::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  clip-path: inherit;
+  opacity: 0.55;
+}
+
+.side-panel.left {
+  border-left: 2px solid var(--accent);
+}
+
+.side-panel.right {
+  border-right: 2px solid rgba(232, 249, 255, 0.48);
+}
+
+body.duel .side-panel {
+  top: 53%;
+  transform: translateY(-50%) scale(0.70);
+}
+
+body.duel .side-panel.left { left: 12px; }
+body.duel .side-panel.right { right: 12px; }
+
+.hud-label,
+.hud-sub,
+.mon-role,
+.ecl-key {
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(168, 226, 255, 0.22);
+}
+
+.face-glyph {
+  background: linear-gradient(180deg, #ffffff, var(--accent) 48%, rgba(255,255,255,0.52));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 10px var(--accent));
+}
+
+.big-num,
+.mid-num {
+  text-shadow: 0 0 6px #fff, 0 0 20px var(--accent-dim);
+}
+
+.player-tag {
+  top: 26px;
+  padding: 7px 13px 8px;
+  font-size: 13px;
+  background: rgba(2, 7, 17, 0.68);
+  border: 1px solid rgba(230, 249, 255, 0.18);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  backdrop-filter: blur(12px);
+}
+
+.monitor {
+  border-radius: 0;
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+
+.mon-cv { border-radius: 1px; }
+
+.monitors.compass {
+  padding: 10px 12px 9px;
+  border: 1px solid rgba(225,248,255,0.12);
+  background: rgba(2,6,15,0.52);
+  clip-path: polygon(13px 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%, 0 13px);
+  backdrop-filter: blur(12px);
+}
+
+body.duel .monitors.compass {
+  bottom: 20px;
+}
+
+.ecl-bar {
+  height: 10px;
+  border-radius: 2px;
+  background: rgba(0, 3, 10, 0.92);
+  box-shadow: inset 0 0 7px rgba(0,0,0,0.82);
+}
+
+.ecl-fill {
+  background: linear-gradient(90deg, #1455bd, #5cd8ff 58%, #ffffff);
+}
+
+#controls-hint {
+  left: 50%;
+  right: auto;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border: 1px solid rgba(225,248,255,0.13);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%, 0 10px);
+  white-space: nowrap;
+}
+
+#fps-meter {
+  top: 22px;
+  right: 26px;
+  border-radius: 0;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
+/* ---------- title and state screens ---------- */
+#title-screen,
+#gameover-screen,
+#pause-screen,
+#entry-screen,
+#codex-screen,
+#handling-screen {
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(32, 88, 139, 0.18), transparent 46%),
+    linear-gradient(180deg, rgba(1,3,10,0.70), rgba(1,2,7,0.94));
+}
+
+#title-screen .title-inner,
+#gameover-screen .title-inner,
+#entry-screen .title-inner,
+#handling-screen .title-inner {
+  position: relative;
+  max-width: min(94vw, 1180px);
+  padding: clamp(28px, 4vw, 54px);
+  background:
+    linear-gradient(145deg, rgba(12, 25, 44, 0.68), rgba(2, 5, 13, 0.82));
+  border: 1px solid rgba(224,247,255,0.18);
+  clip-path: polygon(24px 0, calc(100% - 24px) 0, 100% 24px, 100% calc(100% - 24px), calc(100% - 24px) 100%, 24px 100%, 0 calc(100% - 24px), 0 24px);
+  box-shadow: 0 0 70px rgba(45, 166, 225, 0.17), inset 0 0 46px rgba(89, 204, 255, 0.05);
+  backdrop-filter: blur(22px);
+}
+
+#title-screen .title-inner::before,
+#gameover-screen .title-inner::before,
+#entry-screen .title-inner::before,
+#handling-screen .title-inner::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  border: 1px solid rgba(98,217,255,0.19);
+  clip-path: inherit;
+}
+
+#logo {
+  background: linear-gradient(180deg, #ffffff 0%, #b9f1ff 30%, #55d1ff 55%, #1c5d9b 86%, #f2fbff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 12px #5bd6ff) drop-shadow(0 0 42px rgba(75,194,255,0.48));
+}
+
+.tagline { color: rgba(221,244,255,0.72); }
+
+#mode-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.mode-card {
+  width: auto;
+  min-height: 122px;
+  border-radius: 0;
+  background: linear-gradient(145deg, rgba(16,30,50,0.64), rgba(2,6,15,0.76));
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
+}
+
+.mode-card.sel {
+  border-color: #70dcff;
+  box-shadow: 0 0 25px rgba(78,206,255,0.42), inset 0 0 26px rgba(88,211,255,0.08);
+}
+
+#keeper-strip,
+#diff-strip,
+#lb-panel {
+  background: rgba(2,7,17,0.36);
+  border: 1px solid rgba(225,248,255,0.10);
+  padding: 11px 15px;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%, 0 8px);
+}
+
+.press {
+  display: inline-block;
+  padding: 8px 14px;
+  background: rgba(2,7,17,0.46);
+  border: 1px solid rgba(225,248,255,0.12);
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%, 0 8px);
+}
+
+/* ---------- responsive safety ---------- */
+@media (max-width: 1120px) {
+  body.duel #panes { gap: 48px; padding: 8px; }
+  .crystal-corner { width: 58px; height: 58px; }
+  .rail-top, .rail-bottom { left: 44px; right: 44px; }
+  .rail-left, .rail-right { top: 44px; bottom: 44px; }
+  .duel-score-stack { display: none; }
+  body.duel #timer-wrap { top: 112px; }
+}
+
+@media (max-width: 900px) {
+  #mode-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #controls-hint { display: none; }
+  body.duel #duel-spine { opacity: 0.65; }
+  body.duel .side-panel { transform: translateY(-50%) scale(0.58); }
+}
+
+@media (max-height: 780px) {
+  .crystal-chassis { inset: 5px; }
+  .crystal-corner { width: 54px; height: 54px; }
+  .rail-top, .rail-bottom { left: 41px; right: 41px; }
+  .rail-left, .rail-right { top: 41px; bottom: 41px; }
+  #timer-wrap { transform: translateX(-50%) scale(0.82); transform-origin: top center; }
+  body.duel #timer-wrap { transform: translateX(-50%) scale(0.62); }
+  .side-panel { transform: translateY(-50%) scale(0.82); }
+}
